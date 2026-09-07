@@ -1,3 +1,4 @@
+import { singboxController } from '../singbox/controller.js';
 /**
  * Main Fastify Application
  * 
@@ -1378,10 +1379,11 @@ export async function createApp(options: AppOptions) {
   await app.register(statsController, { prefix: '/api/stats' });
   await app.register(authController, { prefix: '/api/auth' });
   await app.register(configController, { prefix: '/api/db' });
+  await app.register(singboxController, { prefix: '/api/singbox' });
 
   if (autoListen) {
     // Start server
-    await app.listen({ port, host: '0.0.0.0' });
+    await app.listen({ port, host: process.env.LISTEN_HOST || '0.0.0.0' });
     console.log(`[API] Server running at http://localhost:${port}`);
 
     // Start automatic health checks for upstream gateways

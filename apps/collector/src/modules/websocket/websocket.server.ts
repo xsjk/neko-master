@@ -217,7 +217,7 @@ export class StatsWebSocketServer {
   start() {
     this.wss = new WSServer({
       port: this.port,
-      host: '0.0.0.0',
+      host: process.env.LISTEN_HOST || '0.0.0.0',
       perMessageDeflate: false,
     });
 

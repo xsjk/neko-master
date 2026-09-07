@@ -152,6 +152,7 @@ async function manageBackends() {
 
     // Find backends that need to be started (listening=true but not connected)
     for (const backend of backends) {
+      if (backend.url.startsWith('singbox:')) continue;
       const existingCollector = collectors.get(backend.id);
       const lastConfig = lastBackendConfigs.get(backend.id);
       const isAgentBackend = isAgentBackendUrl(backend.url);
