@@ -7,7 +7,7 @@ export class NativeLatencyTester {
     private groups: () => NativeGroup[],
     private connected: () => boolean,
     private trigger: (tag: string) => Promise<unknown>,
-    private timeoutMs = 30000,
+    private timeoutMs = 5000,
   ) {}
 
   async test(tag: string): Promise<NativeLatencyResult> {

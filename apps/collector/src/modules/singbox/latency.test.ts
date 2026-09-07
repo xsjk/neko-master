@@ -13,6 +13,15 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 const setup = (trigger = vi.fn(async (_tag: string) => {})) => ({ trigger, tester: new NativeLatencyTester(() => groups, () => online, trigger, 500) });
 describe('native latency tests', () => {
+  it('defaults to a five-second result timeout', async () => {
+    const tester = new NativeLatencyTester(() => groups, () => online, async () => {});
+    let finished = false;
+    const pending = tester.test('b').then(result => { finished = true; return result; });
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(finished).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ tag: 'b', status: 'timeout', testedAt: '0' });
+  });
   it('returns fast nodes independently while another node is still pending', async () => {
     const { tester, trigger } = setup();
     const fast = tester.test('a');
