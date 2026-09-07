@@ -22,6 +22,11 @@ const API_DESTINATION = apiUrl.endsWith('/api')
 // Base Next.js config
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // Native node tests wait up to 30s, plus RPC scheduling and history alignment.
+    // Keep the rewrite proxy alive until the collector returns the node result.
+    proxyTimeout: 60000,
+  },
   output: 'standalone',
   outputFileTracingRoot: join(__dirname, '../..'),
   env: {
@@ -88,7 +93,7 @@ let finalConfig = withNextIntl(nextConfig);
 
 if (process.env.NODE_ENV === "production") {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const withPWA = require("@ducanh2912/next-pwa");
     finalConfig = withPWA({
       dest: "public",
