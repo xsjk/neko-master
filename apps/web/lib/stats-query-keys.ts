@@ -313,3 +313,7 @@ export function getRuleIPsQueryKey(
     },
   ] as const;
 }
+
+export function getNativeQueryKey(resource: string, params = '') {
+  return ['singbox', resource, params] as const;
+}

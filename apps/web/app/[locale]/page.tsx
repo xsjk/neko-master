@@ -1,3 +1,3 @@
-import DashboardPage from "./dashboard/page";
+import SingboxPage from "./singbox/page";
 
-export default DashboardPage;
+export default SingboxPage;
