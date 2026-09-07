@@ -108,6 +108,8 @@ export class CleanupService {
     const startTime = Date.now();
 
     try {
+      this.db.repos.config.cleanupNativeLedger();
+
       // Clean up old minute-level stats
       const logsDeleted = this.cleanupConnectionLogs();
 

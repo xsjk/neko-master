@@ -110,6 +110,7 @@ export class BackendService {
     const minute = this.toMinuteKey(now);
 
     for (const backend of backends) {
+      if (backend.url.startsWith('singbox:')) continue;
       try {
         if (isAgentBackendUrl(backend.url)) {
           const health = this.buildAgentHealthStatus(backend.id, now);
@@ -552,6 +553,7 @@ export class BackendService {
    */
   async testConnection(input: TestConnectionInput): Promise<TestConnectionResult> {
     const { url, token, type = 'clash' } = input;
+    if (type === 'singbox') return { success: false, message: 'Native sing-box status is available at /api/singbox/status' };
 
     if (isAgentBackendUrl(url)) {
       return { success: true, message: 'Agent mode backend configured (use backend test by id for realtime online status)' };

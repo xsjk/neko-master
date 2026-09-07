@@ -4,6 +4,7 @@
  * Handles database maintenance: retention configuration, data cleanup,
  * vacuum, and statistics about stored data.
  */
+import { cleanupNative } from '../../modules/singbox/ledger.js';
 import type Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -45,6 +46,9 @@ export class ConfigRepository extends BaseRepository {
     super(db);
     this.dbPath = dbPath;
   }
+
+  // Native ledger retention is fixed independently of legacy gateway retention.
+  cleanupNativeLedger() { cleanupNative(this.db); }
 
   // Retention config
   getRetentionConfig(): DatabaseRetentionConfig {

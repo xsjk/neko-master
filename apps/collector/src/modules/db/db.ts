@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { randomBytes } from 'crypto';
 import { normalizeGeoIP, type Connection, type DomainStats, type IPStats, type HourlyStats, type ProxyStats, type RuleStats, type ProxyTrafficStats, type DeviceStats } from '@neko-master/shared';
-import { getAllSchemaStatements } from '../../database/schema.js';
+import { SCHEMA, getAllSchemaStatements } from '../../database/schema.js';
 import { cleanupMisattributedRuleNames } from '../../database/rule-name-cleanup.js';
 import {
   AuthRepository,
@@ -42,7 +42,7 @@ export interface BackendConfig {
   name: string;
   url: string;
   token: string;
-  type: 'clash' | 'surge';
+  type: 'clash' | 'surge' | 'singbox';
   enabled: boolean;
   is_active: boolean;
   listening: boolean;
@@ -142,7 +142,8 @@ export class StatsDatabase {
 
     // Enable WAL mode and performance PRAGMAs for reduced disk IO
     this.db.pragma('journal_mode = WAL');
-    this.db.pragma('synchronous = NORMAL');
+    this.db.pragma(process.env.SINGBOX_ADDRESS ? 'synchronous = FULL' : 'synchronous = NORMAL');
+    if (process.env.SINGBOX_ADDRESS) this.db.pragma('foreign_keys = ON');
     this.db.pragma(`wal_autocheckpoint = ${sqliteWalAutocheckpointPages}`);
     this.db.pragma('temp_store = MEMORY');
     this.db.pragma(`cache_size = -${sqliteCacheMb * 1024}`);
@@ -156,6 +157,21 @@ export class StatsDatabase {
     for (const stmt of getAllSchemaStatements()) {
       this.db.exec(stmt);
     }
+
+    // Native schema v2: cluster facts by their time/dimension primary key.
+    // Older ledgers are copied atomically; the DDL remains owned by schema.ts.
+    const nativeSchema = this.db.prepare("SELECT sql FROM sqlite_master WHERE name='sb_facts'").get() as { sql: string };
+    if (!nativeSchema.sql.includes('WITHOUT ROWID')) {
+      this.db.transaction(() => {
+        const ddl = SCHEMA.SINGBOX.match(/CREATE TABLE IF NOT EXISTS sb_facts[\s\S]*?WITHOUT ROWID;/)![0];
+        this.db.exec(ddl.replace('sb_facts', 'sb_facts_v2'));
+        this.db.exec('INSERT INTO sb_facts_v2 SELECT * FROM sb_facts');
+        this.db.exec('DROP TABLE sb_facts');
+        this.db.exec('ALTER TABLE sb_facts_v2 RENAME TO sb_facts');
+        this.db.exec(SCHEMA.SINGBOX);
+      })();
+    }
+    this.db.prepare('UPDATE sb_meta SET version=2 WHERE version<2').run();
 
     // Drop legacy (total_download + total_upload) expression indexes: the
     // planner never used them (queries filter by backend_id first) and they
@@ -1024,7 +1040,7 @@ export class StatsDatabase {
   getCleanupStats() { return this.repos.config.getCleanupStats(); }
 
   // Backend
-  createBackend(backend: { name: string; url: string; token?: string; type?: 'clash' | 'surge' }) { return this.repos.backend.createBackend(backend); }
+  createBackend(backend: { name: string; url: string; token?: string; type?: 'clash' | 'surge' | 'singbox' }) { return this.repos.backend.createBackend(backend); }
   getAllBackends() { return this.repos.backend.getAllBackends(); }
   getBackend(id: number) { return this.repos.backend.getBackend(id); }
   getActiveBackend() { return this.repos.backend.getActiveBackend(); }
@@ -1184,6 +1200,9 @@ export class StatsDatabase {
     const stmt = this.db.prepare('DELETE FROM agent_snapshots WHERE backend_id = ?');
     stmt.run(backendId);
   }
+
+  /** Shared connection: native checkpoints and facts commit atomically. */
+  getNativeDatabase() { return this.db; }
 
   close() {
     this.db.close();

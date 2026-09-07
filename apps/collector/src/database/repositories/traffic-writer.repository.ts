@@ -4,6 +4,7 @@
  * Handles writing traffic data to the database. batchUpdateTrafficStats is
  * the single write implementation; updateTrafficStats wraps it for one-off writes.
  */
+import { applyNativeBatch, type NativeWriteBatch } from '../../modules/singbox/ledger.js';
 import type Database from 'better-sqlite3';
 import { BaseRepository } from './base.repository.js';
 import { buildRuleName } from '../../shared/utils/rule-name.js';
@@ -42,7 +43,11 @@ export class TrafficWriterRepository extends BaseRepository {
     this.batchUpdateTrafficStats(backendId, [update]);
   }
 
-  batchUpdateTrafficStats(backendId: number, updates: TrafficUpdate[], reduceWrites = false) {
+  batchUpdateTrafficStats(backendId: number, updates: TrafficUpdate[], reduceWrites = false, native?: NativeWriteBatch) {
+    if (native) {
+      this.db.transaction(() => applyNativeBatch(this.db, backendId, native))();
+      return;
+    }
     if (updates.length === 0) return;
 
     const now = new Date();

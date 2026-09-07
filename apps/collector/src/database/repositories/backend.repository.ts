@@ -13,7 +13,7 @@ export interface BackendConfig {
   name: string;
   url: string;
   token: string;
-  type: 'clash' | 'surge';
+  type: 'clash' | 'surge' | 'singbox';
   enabled: boolean;
   is_active: boolean;
   listening: boolean;
@@ -31,7 +31,7 @@ export class BackendRepository {
   /**
    * Create a new backend configuration
    */
-  createBackend(backend: { name: string; url: string; token?: string; type?: 'clash' | 'surge' }): number {
+  createBackend(backend: { name: string; url: string; token?: string; type?: 'clash' | 'surge' | 'singbox' }): number {
     const stmt = this.db.prepare(`
       INSERT INTO backend_configs (name, url, token, type, enabled, is_active, listening)
       VALUES (?, ?, ?, ?, 1, 0, 1)
@@ -187,6 +187,9 @@ export class BackendRepository {
   deleteBackendData(id: number): void {
     this.db.exec('BEGIN TRANSACTION');
     try {
+      for (const table of ['sb_facts', 'sb_connections', 'sb_gaps', 'sb_runs', 'sb_meta']) {
+        this.db.prepare(`DELETE FROM ${table} WHERE backend_id = ?`).run(id);
+      }
       this.db.prepare(`DELETE FROM domain_stats WHERE backend_id = ?`).run(id);
       this.db.prepare(`DELETE FROM ip_stats WHERE backend_id = ?`).run(id);
       this.db.prepare(`DELETE FROM proxy_stats WHERE backend_id = ?`).run(id);

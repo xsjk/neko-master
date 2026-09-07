@@ -1,3 +1,5 @@
+export * from './singbox.js';
+
 import type { GeoIPInfo } from "./geo-ip-utils.js";
 
 // Gateway Connection Metadata
@@ -314,7 +316,7 @@ export interface SurgeRulesData {
 }
 
 // Backend Type
-export type BackendType = 'clash' | 'surge';
+export type BackendType = 'clash' | 'surge' | 'singbox';
 
 // Gateway utilities
 export * from './gateway-utils.js';

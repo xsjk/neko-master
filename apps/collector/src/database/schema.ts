@@ -6,6 +6,30 @@
  */
 
 export const SCHEMA = {
+  SINGBOX: `
+    CREATE TABLE IF NOT EXISTS sb_meta (backend_id INTEGER PRIMARY KEY, since INTEGER NOT NULL, last_commit INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 2);
+    CREATE TABLE IF NOT EXISTS sb_runs (backend_id INTEGER NOT NULL, run TEXT NOT NULL, first_seen INTEGER NOT NULL, PRIMARY KEY(backend_id,run));
+    CREATE TABLE IF NOT EXISTS sb_gaps (id INTEGER PRIMARY KEY, backend_id INTEGER NOT NULL, start INTEGER NOT NULL, end INTEGER, reason TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS sb_connections (
+      backend_id INTEGER NOT NULL, run TEXT NOT NULL, id TEXT NOT NULL,
+      source TEXT NOT NULL, destination TEXT NOT NULL, domain TEXT NOT NULL, root_domain TEXT NOT NULL,
+      inbound TEXT NOT NULL, outbound TEXT NOT NULL, rule TEXT NOT NULL, network TEXT NOT NULL, user TEXT NOT NULL,
+      chain TEXT NOT NULL, created INTEGER NOT NULL, closed INTEGER NOT NULL DEFAULT 0,
+      upload INTEGER NOT NULL DEFAULT 0, download INTEGER NOT NULL DEFAULT 0,
+      baseline_upload INTEGER NOT NULL DEFAULT 0, baseline_download INTEGER NOT NULL DEFAULT 0,
+      interrupted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(backend_id,run,id));
+    CREATE INDEX IF NOT EXISTS sb_conn_time ON sb_connections(backend_id,created);
+    CREATE INDEX IF NOT EXISTS sb_conn_closed ON sb_connections(backend_id,closed);
+    CREATE TABLE IF NOT EXISTS sb_facts (
+      backend_id INTEGER NOT NULL, resolution TEXT NOT NULL, bucket INTEGER NOT NULL,
+      source TEXT NOT NULL, domain TEXT NOT NULL, root_domain TEXT NOT NULL, destination TEXT NOT NULL,
+      inbound TEXT NOT NULL, outbound TEXT NOT NULL, rule TEXT NOT NULL, recovered INTEGER NOT NULL DEFAULT 0,
+      upload INTEGER NOT NULL DEFAULT 0, download INTEGER NOT NULL DEFAULT 0, connections INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(backend_id,resolution,bucket,source,domain,root_domain,destination,inbound,outbound,rule,recovered)) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS sb_fact_source ON sb_facts(backend_id,resolution,source,bucket);
+    CREATE INDEX IF NOT EXISTS sb_fact_domain ON sb_facts(backend_id,resolution,domain,bucket);
+  `,
+
   // Domain statistics - aggregated by domain per backend
   DOMAIN_STATS: `
     CREATE TABLE IF NOT EXISTS domain_stats (
@@ -562,6 +586,7 @@ export function getAllSchemaStatements(): string[] {
     SCHEMA.APP_CONFIG,
     SCHEMA.SURGE_POLICY_CACHE,
     SCHEMA.AUTH_CONFIG,
+    SCHEMA.SINGBOX,
     ...INDEXES,
     DEFAULT_APP_CONFIG,
     DEFAULT_AUTH_CONFIG,
