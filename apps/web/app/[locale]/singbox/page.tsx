@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { Activity, ArrowDown, ArrowUp, Database, Moon, Sun, Search, RefreshCw, Network, Download } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { TrafficTrend, displayTime } from "@/components/features/singbox/traffic-trend";
 import type { NativeStats, NativeStatus } from "@neko-master/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,12 +30,22 @@ function bytes(value: string | number | undefined): string {
 const time = (n?: number | string | null) => n ? new Date(Number(n)).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—';
 const dimensions = ['source', 'domain', 'rootDomain', 'destination', 'inbound', 'outbound', 'rule'] as const;
 type Detail = Record<string, string>;
+type Period = { preset: string } | { from: number; to: number };
+const inputTime = (value: number) => new Date(value + 28800000).toISOString().slice(0, 16);
+function normalizePeriod(from: number, to: number, now: number) {
+  const daily = from < now - 90 * 86400000 || to - from > 7 * 86400000;
+  const unit = daily ? 86400000 : 60000, offset = daily ? 28800000 : 0;
+  return { from: Math.floor((from + offset) / unit) * unit - offset, to: Math.ceil((to + offset) / unit) * unit - offset };
+}
 
 export default function SingboxPage() {
   const t = useTranslations('singbox');
   const { resolvedTheme, setTheme } = useTheme();
   const client = useQueryClient();
   const [range, setRange] = useState('24');
+  const [period, setPeriod] = useState<Period>({ preset: '24' });
+  const [history, setHistory] = useState<Period[]>([]);
+  const [timeError, setTimeError] = useState('');
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 60000); return () => clearInterval(timer); }, []);
   const [dimension, setDimension] = useState('domain');
@@ -46,16 +56,25 @@ export default function SingboxPage() {
   const [live, setLive] = useState('all');
   const [page, setPage] = useState(0);
   const status = useQuery({ queryKey: getNativeQueryKey('status'), queryFn: () => request<NativeStatus>('status'), refetchInterval: 3000 });
+  function applyPeriod(next: Period) {
+    setPeriod(next); setPage(0); setTimeError('');
+    setRange('preset' in next ? next.preset : 'custom');
+    if ('from' in next) { setCustomFrom(inputTime(next.from)); setCustomTo(inputTime(next.to)); }
+  }
+  function selectTime(from: number, to: number) {
+    setHistory(old => [...old, period]);
+    applyPeriod(normalizePeriod(from, to, clock));
+  }
+  function applyCustom() {
+    const from = Date.parse(customFrom + '+08:00'), to = Date.parse(customTo + '+08:00');
+    if (!customFrom || !customTo || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) { setTimeError(t('invalidTime')); return; }
+    setHistory([]); applyPeriod(normalizePeriod(from, to, clock));
+  }
   function parameters() {
     const p = new URLSearchParams(filters);
-    if (range !== 'all' && range !== 'custom') {
-      const now = Math.floor(clock / 60000) * 60000;
-      p.set('from', new Date(now - Number(range) * 3600000).toISOString());
-    }
-    if (range === 'custom') {
-      if (customFrom) p.set('from', new Date(customFrom + '+08:00').toISOString());
-      if (customTo) p.set('to', new Date(customTo + '+08:00').toISOString());
-    }
+    const now = Math.floor(clock / 60000) * 60000;
+    const interval = 'from' in period ? period : period.preset === 'all' ? null : normalizePeriod(now - Number(period.preset) * 3600000, now + 60000, clock);
+    if (interval) { p.set('from', new Date(interval.from).toISOString()); p.set('to', new Date(interval.to).toISOString()); }
     return p;
   }
   const params = parameters(); params.set('dimension', dimension);
@@ -72,7 +91,6 @@ export default function SingboxPage() {
     const next = { ...filters, [dimension]: label }; setFilters(next); setDraft(next); setPage(0);
     if (dimension === 'source') setDimension('domain'); else if (dimension === 'domain' || dimension === 'rootDomain') setDimension('source');
   }
-  const chart = (stats.data?.trend || []).map(row => ({ ...row, bucket: Number(row.bucket), upload: Number(row.upload), download: Number(row.download) }));
   function errorBox(error: Error | null, retry: () => void) { return error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive p-4 text-sm text-destructive">{error.message}<Button variant="outline" onClick={retry}>{t('retry')}</Button></div>; }
   return <main className="mx-auto max-w-[1500px] space-y-6 p-4 md:p-8">
     <header className="flex flex-wrap items-center justify-between gap-4">
@@ -89,17 +107,19 @@ export default function SingboxPage() {
     </div>
     {errorBox(lifetime.error, () => lifetime.refetch())}
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Search className="size-4" />{t('explore')}</CardTitle></CardHeader><CardContent className="space-y-4">
-      <div className="flex flex-wrap gap-3"><select className={selectClass} aria-label={t('range')} value={range} onChange={e => { setRange(e.target.value); setPage(0); }}><option value="1">{t('hour')}</option><option value="24">{t('day')}</option><option value="168">{t('week')}</option><option value="720">{t('month')}</option><option value="all">{t('all')}</option><option value="custom">{t('custom')}</option></select>
-        {range === 'custom' && <><Input className="w-auto" aria-label={t('from')} type="datetime-local" value={customFrom} onChange={e => setCustomFrom(e.target.value)} /><Input className="w-auto" aria-label={t('to')} type="datetime-local" value={customTo} onChange={e => setCustomTo(e.target.value)} /></>}
+      <div className="flex flex-wrap gap-3"><select className={selectClass} aria-label={t('range')} value={range} onChange={e => { const value = e.target.value; setRange(value); setTimeError(''); if (value !== 'custom') { setHistory([]); applyPeriod({ preset: value }); } else { setCustomFrom(inputTime(stats.data?.from || clock - 86400000)); setCustomTo(inputTime(stats.data?.to || clock)); } }}><option value="1">{t('hour')}</option><option value="24">{t('day')}</option><option value="168">{t('week')}</option><option value="720">{t('month')}</option><option value="all">{t('all')}</option><option value="custom">{t('custom')}</option></select>
+        {range === 'custom' && <><Input className="w-auto" aria-label={t('from')} type="datetime-local" value={customFrom} onChange={e => setCustomFrom(e.target.value)} /><Input className="w-auto" aria-label={t('to')} type="datetime-local" value={customTo} onChange={e => setCustomTo(e.target.value)} /><Button onClick={applyCustom}>{t("applyTime")}</Button></>}
         <select className={selectClass} aria-label={t('dimension')} value={dimension} onChange={e => setDimension(e.target.value)}>{dimensions.map(d => <option key={d} value={d}>{t(d)}</option>)}</select>
         <span className="self-center text-xs text-muted-foreground">{t('timezone')} · {stats.data?.granularity === 'day' ? t('dailyBoundary') : t('minute')}</span>
       </div>
+      {timeError && <p role="alert" className="text-sm text-destructive">{timeError}</p>}
+      {stats.data && !('preset' in period && period.preset === 'all') && <p className="text-xs text-muted-foreground" data-testid="effective-time">{t('effectiveTime')}: {displayTime(stats.data.from)} → {displayTime(stats.data.to)} · {t('exclusiveEnd')}</p>}
       <form className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4" onSubmit={e => { e.preventDefault(); setFilters(draft); setPage(0); }}>{dimensions.filter(d => d !== 'rootDomain').map(d => <Input key={d} aria-label={t(d)} placeholder={t(d)} value={draft[d] || ''} onChange={e => setDraft({ ...draft, [d]: e.target.value })} />)}<Button type="submit">{t('apply')}</Button><Button variant="outline" type="button" onClick={() => { setDraft({}); setFilters({}); setPage(0); }}>{t('clear')}</Button></form>
       {Object.entries(filters).filter(([,v]) => v).map(([k,v]) => <Button className="mr-2" variant="secondary" key={k} onClick={() => { const next = { ...filters }; delete next[k]; setFilters(next); setDraft(next); }}>{t(k)}: {v} ×</Button>)}
     </CardContent></Card>
     {errorBox(stats.error, () => stats.refetch())}
     <div className="grid gap-6 lg:grid-cols-2">
-      <Card className="min-w-0"><CardHeader><CardTitle>{t('trend')}</CardTitle></CardHeader><CardContent><div className="h-72">{stats.isLoading ? <p>{t('loading')}</p> : chart.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)" /><XAxis dataKey="bucket" tickFormatter={v => new Date(v).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} tick={{ fill: 'currentColor', fontSize: 10 }} minTickGap={45} /><YAxis tickFormatter={v => bytes(Math.round(v))} tick={{ fill: 'currentColor', fontSize: 10 }} width={72} /><Tooltip labelFormatter={v => time(String(v))} formatter={(v, name) => [bytes(Math.round(Number(v))), name === 'download' ? t('download') : t('upload')]} contentStyle={{ background: 'var(--card)', borderColor: 'var(--border)', borderRadius: 12 }} /><Area type="monotone" dataKey="download" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.18} /><Area type="monotone" dataKey="upload" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.1} /></AreaChart></ResponsiveContainer> : <p className="text-muted-foreground">{t('empty')}</p>}</div></CardContent></Card>
+      <TrafficTrend stats={stats.data} all={'preset' in period && period.preset === 'all'} loading={stats.isLoading} canBack={history.length > 0} bytes={bytes} onSelect={selectTime} onBack={() => { const previous = history[history.length - 1]; if (previous) { setHistory(old => old.slice(0, -1)); applyPeriod(previous); } }} onReset={() => { setHistory([]); applyPeriod({ preset: '24' }); }} />
       <Card><CardHeader><CardTitle>{t('ranking')} · {t(dimension)}</CardTitle><p className="text-xs text-muted-foreground">{t('drill')}</p></CardHeader><CardContent><div className="max-h-72 overflow-auto"><Table><TableHeader><TableRow><TableHead>{t(dimension)}</TableHead><TableHead>{t('download')}</TableHead><TableHead>{t('upload')}</TableHead></TableRow></TableHeader><TableBody>{stats.data?.rows.map(row => <TableRow key={row.label}><TableCell><button className="max-w-64 truncate text-left hover:underline" onClick={() => drill(row.label)} title={row.label}>{row.label || t('unknown')}</button></TableCell><TableCell className="tabular-nums">{bytes(row.download)}</TableCell><TableCell className="tabular-nums">{bytes(row.upload)}</TableCell></TableRow>)}</TableBody></Table>{!stats.data?.rows.length && <p className="p-3 text-muted-foreground">{stats.isLoading ? t('loading') : t('empty')}</p>}</div></CardContent></Card>
     </div>
     <NodeGroups groups={status.data?.groups || []} connected={!!status.data?.connected} loading={status.isLoading} />

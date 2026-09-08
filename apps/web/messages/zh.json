@@ -643,6 +643,13 @@
     "untested": "未测速",
     "currentNode": "当前节点",
     "availableNodes": "{available} / {total} 个节点有延迟记录",
-    "latencyHelp": "点击闪电或节点延迟进行 URL 延迟测速（ms）。自动组也可测速，手动选择仅限 selector；自动组可能按新结果调整出口。"
+    "latencyHelp": "点击闪电或节点延迟进行 URL 延迟测速（ms）。自动组也可测速，手动选择仅限 selector；自动组可能按新结果调整出口。",
+    "applyTime": "应用时间",
+    "invalidTime": "请填写完整的起止时间，结束时间必须晚于开始时间。",
+    "effectiveTime": "生效时间",
+    "exclusiveEnd": "不含结束时刻",
+    "dragTimeHint": "在曲线上左右拖选可放大时间范围；Esc 取消。也可使用自定义时间输入。",
+    "timeBack": "返回上一级",
+    "timeReset": "重置时间"
   }
 }

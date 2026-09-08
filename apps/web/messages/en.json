@@ -644,6 +644,13 @@
     "untested": "Untested",
     "currentNode": "Current node",
     "availableNodes": "{available} / {total} nodes with latency history",
-    "latencyHelp": "Click the lightning button or node latency to run a URL latency test (ms). Automatic groups can be tested; only selectors allow manual selection. Automatic groups may update their outbound after testing."
+    "latencyHelp": "Click the lightning button or node latency to run a URL latency test (ms). Automatic groups can be tested; only selectors allow manual selection. Automatic groups may update their outbound after testing.",
+    "applyTime": "Apply time",
+    "invalidTime": "Enter both dates; the end must be after the start.",
+    "effectiveTime": "Effective range",
+    "exclusiveEnd": "End exclusive",
+    "dragTimeHint": "Drag horizontally to select and zoom; Esc cancels. You can also enter custom dates.",
+    "timeBack": "Back",
+    "timeReset": "Reset time"
   }
 }
