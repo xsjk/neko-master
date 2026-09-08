@@ -101,17 +101,37 @@ describe('native lossless ledger', () => {
     expect(result.from).toBe(start); expect(result.to).toBe(start + 60000);
     expect(result.stepMs).toBe(60000); expect(result.granularity).toBe('minute');
     expect(result.total.download).toBe('100');
+    expect(result.rows[0].download).toBe('100');
+    expect(result.trend.map(row => Number(row.bucket))).toEqual([start, start + 60000]);
   });
   it('keeps daily chart buckets at Shanghai midnight and exposes effective bounds', () => {
     const start = Date.parse('2020-01-01T00:00:00+08:00');
     write([], { reset: true, now: start });
     write([event(connection('a', '10', '100'))], { now: start + 1000 });
+    write([event(connection('b', '20', '200'))], { now: start + 86400000 });
+    write([event(connection('c', '30', '300'))], { now: start + 2 * 86400000 });
     const result = queryNativeStats(fixture.db.getNativeDatabase(), backend, {
       from: '2020-01-01T08:00:00+08:00', to: '2020-01-01T09:00:00+08:00',
     });
     expect(result.from).toBe(start); expect(result.to).toBe(start + 86400000);
     expect(result.stepMs).toBe(86400000); expect(result.granularity).toBe('day');
-    expect(Number(result.trend[0].bucket)).toBe(start);
+    expect(result.trend.map(row => Number(row.bucket))).toEqual([start, start + 86400000]);
+    expect(result.total.download).toBe('100');
+  });
+  it('fetches a complete aggregated right-hand bucket without extending totals', () => {
+    const start = Math.floor((Date.now() - 2 * 86400000) / 360000) * 360000;
+    const end = start + 86400000 - 60000; // Inside a six-minute display bucket.
+    write([], { reset: true, now: start });
+    write([event(connection('inside', '10', '100'))], { now: end - 60000 });
+    write([event(connection('edge', '10', '200'))], { now: start + 86400000 });
+    write([event(connection('tail', '10', '300'))], { now: start + 86400000 + 5 * 60000 });
+    write([event(connection('outside', '10', '400'))], { now: start + 86400000 + 6 * 60000 });
+    const result = queryNativeStats(fixture.db.getNativeDatabase(), backend, {from:new Date(start).toISOString(),to:new Date(end).toISOString()});
+    expect(result.stepMs).toBe(360000);expect(result.to).toBe(end);
+    expect(result.total.download).toBe('100');
+    expect(result.trend.at(-1)).toMatchObject({bucket:start + 86400000,download:'500'});
+    const latest = queryNativeStats(fixture.db.getNativeDatabase(), backend, {from:new Date(start).toISOString(),to:new Date(Date.now()).toISOString()});
+    expect(latest.trend.every(row=>Number(row.bucket)<Date.now())).toBe(true);
   });
   it('isolates backends and rejects invalid query ranges/dimensions', () => {
     write([], { reset:true }); write([event(connection('a','1','2'))]);

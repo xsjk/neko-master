@@ -4,7 +4,7 @@ The ledger supports rolling presets, applied custom dates, and horizontal drag-t
 
 Statistics, rankings, connection filters and exports share the applied interval. Connection details continue to filter by creation time and show the connection's recorded lifetime bytes, rather than bytes within the selected interval. Cumulative counters remain unfiltered.
 
-`GET /api/singbox/stats` retains its existing parameters and adds numeric `from`, `to` and `stepMs` response fields (Unix milliseconds). Bounds are half-open and rounded outwards to stored minute/day precision. Daily chart buckets retain Shanghai midnight. Ranges over seven days or beginning outside minute retention use daily facts. No schema migration is required.
+`GET /api/singbox/stats` retains its existing parameters and adds numeric `from`, `to` and `stepMs` response fields (Unix milliseconds). Bounds are half-open and rounded outwards to stored minute/day precision. Daily chart buckets retain Shanghai midnight. Trend queries fetch one complete bucket beyond the right boundary for interpolation; the viewport, totals, rankings and detail/export bounds are unchanged. Missing samples are not synthesized. Ranges over seven days or beginning outside minute retention use daily facts. No schema migration is required.
 
 Tick spacing adapts to the selected time span and available plot width, using aligned minute/hour/day intervals. A five-minute desktop range has one-minute ticks; tick labels omit dates within a single day. The chart displays both the tick interval and data bucket width, and never implies precision finer than the stored data.
 
