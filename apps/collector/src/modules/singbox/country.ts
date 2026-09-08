@@ -1,12 +1,11 @@
 import type Database from 'better-sqlite3';
 import { isIP } from 'node:net';
-import { Resolver } from 'node:dns/promises';
 import { openLocalCountryDatabase } from '../geo/geo.service.js';
 
 let lookup: ((ip: string) => string) | undefined;
 let error: string | null = 'Country database is not configured';
 const cache = new Map<string, string>();
-const resolver = new Resolver({ timeout: 2000, tries: 1 });
+const shutdown = new AbortController();
 const domains = new Map<string, { country: string; expires: number }>();
 const pending = new Set<string>();
 const queue: string[] = [];
@@ -16,11 +15,24 @@ function resolveDomain(host: string) {
   pending.add(host); queue.push(host);
   drain();
 }
+async function queryDNS(host: string, type: 'A' | 'AAAA'): Promise<string[]> {
+  const url = new URL('/dns/query', process.env.SINGBOX_CLASH_API_URL || 'http://127.0.0.1:9090');
+  url.searchParams.set('name', host); url.searchParams.set('type', type);
+  const secret = process.env.SINGBOX_CLASH_SECRET;
+  const response = await fetch(url, {
+    headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(5000)]),
+  });
+  if (!response.ok) throw new Error('sing-box DNS query failed');
+  const data = await response.json() as { Status: number; Answer?: {type:number;data:string}[] };
+  if (data.Status !== 0) return [];
+  return (data.Answer || []).filter(answer => answer.type === (type === 'A' ? 1 : 28) && isIP(answer.data)).map(answer => answer.data);
+}
 function drain() {
   while (active < 8 && queue.length) {
     const host = queue.shift()!;
     active++;
-    void Promise.allSettled([resolver.resolve4(host), resolver.resolve6(host)]).then(results => {
+    void Promise.allSettled([queryDNS(host, 'A'), queryDNS(host, 'AAAA')]).then(results => {
       const addresses = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
       // Never duplicate a hostname's bytes across DNS answers or guess between countries.
       const countries = new Set(addresses.map(ip => nativeCountry(ip)));
@@ -61,5 +73,5 @@ export function registerNativeCountry(db: Database.Database) {
 
 export function stopNativeCountry() {
   queue.length = 0;
-  resolver.cancel();
+  shutdown.abort();
 }

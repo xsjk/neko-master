@@ -1,9 +1,15 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 const mocks = vi.hoisted(() => ({resolve4:vi.fn(),resolve6:vi.fn()}));
-vi.mock('node:dns/promises', () => ({Resolver:class {resolve4=mocks.resolve4;resolve6=mocks.resolve6;}}));
+beforeEach(()=>{
+  vi.stubGlobal('fetch',vi.fn(async (url:URL)=>{
+    const v4=url.searchParams.get('type')==='A';
+    const values=await (v4 ? mocks.resolve4 : mocks.resolve6)(url.searchParams.get('name'));
+    return {ok:true,json:async()=>({Status:0,Answer:values.map((data:string)=>({type:v4?1:28,data}))})};
+  }));
+});
 vi.mock('../geo/geo.service.js', () => ({openLocalCountryDatabase:async()=> (ip:string)=>ip.startsWith('1.') ? 'CN' : 'US'}));
-afterEach(()=>{vi.resetModules();vi.clearAllMocks();});
+afterEach(()=>{vi.resetModules();vi.clearAllMocks();vi.unstubAllGlobals();vi.unstubAllEnvs();});
 it('classifies a hostname once regardless of DNS answer count, without changing bytes', async () => {
   mocks.resolve4.mockResolvedValue(['1.1.1.1','1.1.1.2']);mocks.resolve6.mockResolvedValue([]);
   const {loadNativeCountry,registerNativeCountry}=await import('./country.js');
@@ -29,4 +35,18 @@ it('keeps mixed-country and failed DNS answers Unknown and caches failures',asyn
   await new Promise(resolve=>setImmediate(resolve));
   expect(nativeCountry('mixed.example.com')).toBe('');expect(nativeCountry('failed.example.com')).toBe('');
   expect(mocks.resolve4).toHaveBeenCalledTimes(2);
+});
+
+it('uses only the configured sing-box API and respects empty and CNAME-only responses',async()=>{
+  vi.stubEnv('SINGBOX_CLASH_API_URL','http://127.0.0.1:19090');
+  vi.stubEnv('SINGBOX_CLASH_SECRET','fixture-token');
+  const fetchMock=vi.fn().mockResolvedValue({ok:true,json:async()=>({Status:0,Answer:[{type:5,data:'alias.example.com.'}]})});
+  vi.stubGlobal('fetch',fetchMock);
+  const {loadNativeCountry,nativeCountry}=await import('./country.js');await loadNativeCountry('fixture');
+  nativeCountry('ipv6.example.com');await new Promise(resolve=>setImmediate(resolve));
+  expect(nativeCountry('ipv6.example.com')).toBe('');expect(fetchMock).toHaveBeenCalledTimes(2);
+  for(const [url,options] of fetchMock.mock.calls){
+    expect(url.origin).toBe('http://127.0.0.1:19090');expect(url.pathname).toBe('/dns/query');
+    expect(options.headers.Authorization).toBe('Bearer fixture-token');
+  }
 });
