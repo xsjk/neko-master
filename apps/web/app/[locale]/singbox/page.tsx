@@ -49,8 +49,7 @@ export default function SingboxPage() {
   const [timeError, setTimeError] = useState('');
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 60000); return () => clearInterval(timer); }, []);
-  const [dimension, setDimension] = useState('domain');
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [dimension, setDimension] = useState<typeof dimensions[number]>('domain');
   const [expression, setExpression] = useState<NativeFilterExpression>({ match: 'all', rules: [] });
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -72,7 +71,7 @@ export default function SingboxPage() {
     setHistory([]); applyPeriod(normalizePeriod(from, to, clock));
   }
   function parameters() {
-    const p = new URLSearchParams(filters);
+    const p = new URLSearchParams();
     if (expression.rules.length) p.set('filter', JSON.stringify(expression));
     const now = Math.floor(clock / 60000) * 60000;
     const interval = 'from' in period ? period : period.preset === 'all' ? null : normalizePeriod(now - Number(period.preset) * 3600000, now + 60000, clock);
@@ -90,7 +89,9 @@ export default function SingboxPage() {
   const selectClass = 'h-10 rounded-lg border border-input bg-background px-3 text-sm';
   const metric = (label: string, value: string, icon: React.ReactNode, sub: string) => <Card><CardContent className="space-y-3"><div className="flex justify-between text-sm text-muted-foreground">{label}{icon}</div><div className="text-3xl font-semibold tracking-tight tabular-nums">{value}</div><p className="text-xs text-muted-foreground">{sub}</p></CardContent></Card>;
   function drill(label: string) {
-    const next = { ...filters, [dimension]: label }; setFilters(next); setPage(0);
+    setExpression(old => old.rules.some(rule => rule.field === dimension && rule.op === 'in' && rule.values.length === 1 && rule.values[0] === label)
+      ? old : { ...old, rules: [...old.rules, { field: dimension, op: 'in', values: [label] }] });
+    setPage(0);
     if (dimension === 'source') setDimension('domain'); else if (dimension === 'domain' || dimension === 'rootDomain') setDimension('source');
   }
   function errorBox(error: Error | null, retry: () => void) { return error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive p-4 text-sm text-destructive">{error.message}<Button variant="outline" onClick={retry}>{t('retry')}</Button></div>; }
@@ -111,17 +112,17 @@ export default function SingboxPage() {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Search className="size-4" />{t('explore')}</CardTitle></CardHeader><CardContent className="space-y-4">
       <div className="flex flex-wrap gap-3"><select className={selectClass} aria-label={t('range')} value={range} onChange={e => { const value = e.target.value; setRange(value); setTimeError(''); if (value !== 'custom') { setHistory([]); applyPeriod({ preset: value }); } else { setCustomFrom(inputTime(stats.data?.from || clock - 86400000)); setCustomTo(inputTime(stats.data?.to || clock)); } }}><option value="1">{t('hour')}</option><option value="24">{t('day')}</option><option value="168">{t('week')}</option><option value="720">{t('month')}</option><option value="all">{t('all')}</option><option value="custom">{t('custom')}</option></select>
         {range === 'custom' && <><Input className="w-auto" aria-label={t('from')} type="datetime-local" value={customFrom} onChange={e => setCustomFrom(e.target.value)} /><Input className="w-auto" aria-label={t('to')} type="datetime-local" value={customTo} onChange={e => setCustomTo(e.target.value)} /><Button onClick={applyCustom}>{t("applyTime")}</Button></>}
-        <select className={selectClass} aria-label={t('dimension')} value={dimension} onChange={e => setDimension(e.target.value)}>{dimensions.map(d => <option key={d} value={d}>{t(d)}</option>)}</select>
+        <select className={selectClass} aria-label={t('dimension')} value={dimension} onChange={e => setDimension(e.target.value as typeof dimension)}>{dimensions.map(d => <option key={d} value={d}>{t(d)}</option>)}</select>
         <span className="self-center text-xs text-muted-foreground">{t('timezone')} · {stats.data?.granularity === 'day' ? t('dailyBoundary') : t('minute')}</span>
       </div>
       {timeError && <p role="alert" className="text-sm text-destructive">{timeError}</p>}
       {stats.data && !('preset' in period && period.preset === 'all') && <p className="text-xs text-muted-foreground" data-testid="effective-time">{t('effectiveTime')}: {displayTime(stats.data.from)} → {displayTime(stats.data.to)} · {t('exclusiveEnd')}</p>}
-      <FilterBuilder key={JSON.stringify(expression)} value={expression} exact={filters} onRemoveExact={field => { setFilters(old => { const next = { ...old }; delete next[field]; return next; }); setPage(0); }} groups={status.data?.groups || []} onApply={value => { setExpression(value); setPage(0); }} onClear={() => { setExpression({ match: 'all', rules: [] }); setFilters({}); setPage(0); }} />
+      <FilterBuilder key={JSON.stringify(expression)} value={expression} groups={status.data?.groups || []} onApply={value => { setExpression(value); setPage(0); }} onClear={() => { setExpression({ match: 'all', rules: [] }); setPage(0); }} />
     </CardContent></Card>
     {errorBox(stats.error, () => stats.refetch())}
     <div className="grid gap-6 lg:grid-cols-2">
       <TrafficTrend stats={stats.data} all={'preset' in period && period.preset === 'all'} loading={stats.isLoading} canBack={history.length > 0} bytes={bytes} onSelect={selectTime} onBack={() => { const previous = history[history.length - 1]; if (previous) { setHistory(old => old.slice(0, -1)); applyPeriod(previous); } }} onReset={() => { setHistory([]); applyPeriod({ preset: '24' }); }} />
-      <Card><CardHeader><CardTitle>{t('ranking')} · {t(dimension)}</CardTitle><p className="text-xs text-muted-foreground">{t('drill')}</p></CardHeader><CardContent><div className="max-h-72 overflow-auto"><Table><TableHeader><TableRow><TableHead>{t(dimension)}</TableHead><TableHead>{t('download')}</TableHead><TableHead>{t('upload')}</TableHead></TableRow></TableHeader><TableBody>{stats.data?.rows.map(row => <TableRow key={row.label}><TableCell><button className="max-w-64 truncate text-left hover:underline" onClick={() => drill(row.label)} title={row.label}>{row.label || t('unknown')}</button></TableCell><TableCell className="tabular-nums">{bytes(row.download)}</TableCell><TableCell className="tabular-nums">{bytes(row.upload)}</TableCell></TableRow>)}</TableBody></Table>{!stats.data?.rows.length && <p className="p-3 text-muted-foreground">{stats.isLoading ? t('loading') : t('empty')}</p>}</div></CardContent></Card>
+      <Card><CardHeader><CardTitle>{t('ranking')} · {t(dimension)}</CardTitle><p className="text-xs text-muted-foreground">{t('drill')}</p></CardHeader><CardContent><div className="max-h-72 overflow-auto"><Table><TableHeader><TableRow><TableHead>{t(dimension)}</TableHead><TableHead>{t('download')}</TableHead><TableHead>{t('upload')}</TableHead></TableRow></TableHeader><TableBody>{stats.data?.rows.map(row => <TableRow key={row.label}><TableCell><button className="max-w-64 truncate text-left hover:underline" disabled={expression.rules.length >= 20} onClick={() => drill(row.label)} title={row.label}>{row.label || t('unknown')}</button></TableCell><TableCell className="tabular-nums">{bytes(row.download)}</TableCell><TableCell className="tabular-nums">{bytes(row.upload)}</TableCell></TableRow>)}</TableBody></Table>{!stats.data?.rows.length && <p className="p-3 text-muted-foreground">{stats.isLoading ? t('loading') : t('empty')}</p>}</div></CardContent></Card>
     </div>
     <NodeGroups groups={status.data?.groups || []} connected={!!status.data?.connected} loading={status.isLoading} />
     <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>{t('connections')}</CardTitle><div className="flex flex-wrap gap-2"><select className={selectClass} value={live} aria-label={t('connectionState')} onChange={e => { setLive(e.target.value); setPage(0); }}><option value="all">{t('allConnections')}</option><option value="true">{t('active')}</option><option value="false">{t('closed')}</option></select>{['jsonl','csv'].map(format => <Button key={format} variant="outline" asChild><a href={`/api/singbox/export?${detailString}&format=${format}`}><Download className="size-4" />{format.toUpperCase()}</a></Button>)}</div></div></CardHeader><CardContent>{errorBox(details.error, () => details.refetch())}<p className="mb-3 text-xs text-muted-foreground">{t('detailHelp')}</p><Table><TableHeader><TableRow>{['source','domain','destination','inbound','outbound','download','upload','created','state'].map(k => <TableHead key={k}>{t(k)}</TableHead>)}</TableRow></TableHeader><TableBody>{details.data?.map(row => <TableRow key={row.run + row.id}>{['source','domain','destination','inbound','outbound'].map(k => <TableCell key={k} className="max-w-52 truncate" title={row[k]}>{row[k] || '—'}</TableCell>)}<TableCell>{bytes(row.recorded_download)}</TableCell><TableCell>{bytes(row.recorded_upload)}</TableCell><TableCell className="whitespace-nowrap text-xs">{time(row.created)}</TableCell><TableCell>{row.interrupted === '1' ? t('interrupted') : row.closed !== '0' ? t('closed') : t('active')}</TableCell></TableRow>)}</TableBody></Table>{!details.data?.length && <p className="p-4 text-muted-foreground">{details.isLoading ? t('loading') : t('empty')}</p>}<div className="mt-4 flex items-center justify-end gap-3"><Button variant="outline" disabled={!page} onClick={() => setPage(page-1)}>{t('previous')}</Button><span className="text-sm">{page+1}</span><Button variant="outline" disabled={(details.data?.length || 0) < 100} onClick={() => setPage(page+1)}>{t('next')}</Button></div></CardContent></Card>

@@ -21,8 +21,8 @@ function appliedDraft(draft: NativeFilterExpression): NativeFilterExpression {
     return { ...rule, values: values.length ? values : [''] };
   }) };
 }
-export function FilterBuilder({ value, exact, groups, onApply, onClear, onRemoveExact }: {
-  value: NativeFilterExpression; exact: Record<string, string>; onRemoveExact: (field: string) => void; groups: NativeGroup[]; onApply: (value: NativeFilterExpression) => void; onClear: () => void;
+export function FilterBuilder({ value, groups, onApply, onClear }: {
+  value: NativeFilterExpression; groups: NativeGroup[]; onApply: (value: NativeFilterExpression) => void; onClear: () => void;
 }) {
   const t = useTranslations("singbox");
   const [draft, setDraft] = useState(() => value);
@@ -43,7 +43,6 @@ export function FilterBuilder({ value, exact, groups, onApply, onClear, onRemove
     setDraft(old => ({ ...(editing ? old : value), rules: [...(editing ? old.rules : value.rules), { field: 'outbound', op: 'in', values: [] }] }));
     setEditing(true); setError('');
   }
-  const exactEntries = Object.entries(exact).filter(([, text]) => text);
   function ruleLabel(rule: NativeFilterRule) {
     const text = rule.values.map(text => text || t("unknown")).join(', ');
     const operand = rule.op === 'in' ? text : rule.op === 'notIn' ? `≠ ${text}` : rule.op === 'contains' ? `${t('op_contains')} ${text}` : rule.op === 'notContains' ? `${t('op_notContains')} ${text}` : `${rule.op === 'notRegex' ? '!' : ''}/${text}/${rule.ignoreCase ? 'i' : ''}`;
@@ -54,9 +53,8 @@ export function FilterBuilder({ value, exact, groups, onApply, onClear, onRemove
   const groupedOr = value.match === 'any' && value.rules.length > 1;
   return <div className="space-y-3">
     <div data-testid="active-filters" className="flex flex-wrap items-center gap-2">
-      {exactEntries.map(([field, text]) => chip(`${t(field)}: ${text}`, () => onRemoveExact(field), `exact-${field}`))}
-      {groupedOr ? <>{!!exactEntries.length && <span className="text-xs text-muted-foreground">AND</span>}<div role="group" aria-label={t('filterAny')} className="flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-dashed p-2"><span className="text-xs text-muted-foreground">OR</span>{ruleChips}</div></> : ruleChips}
-      {!editing && <><Button size="sm" variant="outline" disabled={value.rules.length >= 20} onClick={addRule}>{t('addFilterRule')}</Button>{!!value.rules.length && <Button size="sm" variant="ghost" onClick={() => { setDraft(value); setError(''); setEditing(true); }}>{t('editFilters')}</Button>}{(!!value.rules.length || !!exactEntries.length) && <Button size="sm" variant="ghost" onClick={onClear}>{t('clear')}</Button>}</>}
+      {groupedOr ? <><div role="group" aria-label={t('filterAny')} className="flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-dashed p-2"><span className="text-xs text-muted-foreground">OR</span>{ruleChips}</div></> : ruleChips}
+      {!editing && <><Button size="sm" variant="outline" disabled={value.rules.length >= 20} onClick={addRule}>{t('addFilterRule')}</Button>{!!value.rules.length && <Button size="sm" variant="ghost" onClick={() => { setDraft(value); setError(''); setEditing(true); }}>{t('editFilters')}</Button>}{!!value.rules.length && <Button size="sm" variant="ghost" onClick={onClear}>{t('clear')}</Button>}</>}
     </div>
     {editing && <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
     <div className="flex flex-wrap items-center gap-3"><select className={selectClass} aria-label={t("filterMatch")} value={draft.match} disabled={pending} onChange={event => setDraft({ ...draft, match: event.target.value as NativeFilterExpression['match'] })}><option value="all">{t("filterAll")}</option><option value="any">{t("filterAny")}</option></select><span className="text-xs text-muted-foreground">{changed ? t("filterUnapplied") : t("filterHelp")}</span></div>
