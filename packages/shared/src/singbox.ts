@@ -13,7 +13,7 @@ export interface NativeBatch { events: NativeEvent[]; reset: boolean }
 export interface NativeFilters {
   from?: string; to?: string; source?: string; domain?: string; rootDomain?: string;
   destination?: string; inbound?: string; outbound?: string; rule?: string;
-  dimension?: string; page?: string; live?: string;
+  dimension?: string; page?: string; live?: string; filter?: string;
 }
 export interface NativeGroup {
   tag: string; type: string; selectable: boolean; selected: string;
@@ -42,3 +42,13 @@ export interface NativeLatencyResult {
   delay?: number;
   testedAt: string;
 }
+
+export const nativeFilterFields = ['source', 'domain', 'rootDomain', 'destination', 'inbound', 'outbound', 'rule'] as const;
+export const nativeFilterOperators = ['in', 'notIn', 'contains', 'notContains', 'regex', 'notRegex'] as const;
+export interface NativeFilterRule {
+  field: typeof nativeFilterFields[number];
+  op: typeof nativeFilterOperators[number];
+  values: string[];
+  ignoreCase?: boolean;
+}
+export interface NativeFilterExpression { match: 'all' | 'any'; rules: NativeFilterRule[] }

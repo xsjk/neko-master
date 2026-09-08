@@ -1,3 +1,4 @@
+import { parseFilter, filterColumns } from './filters.js';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { Readable } from 'node:stream';
@@ -19,6 +20,13 @@ export const singboxController: FastifyPluginAsync = async app => {
   });
   app.setErrorHandler((err, _req, reply) => reply.code(400).send({ error: err instanceof Error ? err.message : 'Native request failed' }));
   app.get('/status', async () => service.status());
+  app.post<{ Body: { filter: string } }>('/filters/validate', async req => {
+    if (typeof req.body?.filter !== 'string') throw new Error('filter is required');
+    return parseFilter(req.body.filter);
+  });
+  app.get('/filter-options', async () => Object.fromEntries(['outbound', 'inbound', 'rule'].map(field => [field,
+    sql.prepare(`SELECT DISTINCT ${filterColumns[field as keyof typeof filterColumns]} value FROM sb_facts WHERE backend_id=? AND resolution='day' ORDER BY value LIMIT 200`).all(service.backend).map(row => (row as { value: string }).value),
+  ])));
   app.get('/groups', async () => service.getGroups());
   app.post<{ Body: { tag: string } }>('/groups/url-test', async req => {
     if (typeof req.body?.tag !== 'string' || !req.body.tag.trim()) throw new Error('tag is required');

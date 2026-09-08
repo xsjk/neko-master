@@ -31,6 +31,17 @@ describe('native query and export HTTP API',()=>{
     const csv=await app.inject('/api/singbox/export?format=csv');
     expect(csv.body).toContain('"\'=formula"');expect(csv.headers['content-disposition']).toContain('connections.csv');
   });
+  it('validates advanced filters and applies regex on the separate export connection', async()=>{
+    const filter=JSON.stringify({match:'all',rules:[{field:'domain',op:'regex',values:['^example\\.com$']}]});
+    expect((await app.inject({method:'POST',url:'/api/singbox/filters/validate',payload:{filter}})).statusCode).toBe(200);
+    const query=new URLSearchParams({filter}).toString();
+    const stats=await app.inject('/api/singbox/stats?'+query);
+    expect(stats.json().total.upload).toBe('9007199254740993');
+    const output=await app.inject('/api/singbox/export?format=jsonl&'+query);
+    expect(output.statusCode).toBe(200);expect(output.body.trim().split('\n').map(row=>JSON.parse(row).id)).toEqual(['a']);
+    const options=await app.inject('/api/singbox/filter-options');expect(options.json().outbound).toEqual(['direct']);
+    const invalid=await app.inject({method:'POST',url:'/api/singbox/filters/validate',payload:{filter:'not json'}});expect(invalid.statusCode).toBe(400);
+  });
   it('rejects foreign origins, invalid filters and selection while offline',async()=>{
     expect((await app.inject({url:'/api/singbox/status',headers:{origin:'https://example.com'}})).statusCode).toBe(403);
     expect((await app.inject('/api/singbox/stats?from=bad')).statusCode).toBe(400);

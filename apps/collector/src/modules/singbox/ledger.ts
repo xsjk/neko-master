@@ -1,3 +1,4 @@
+import { compileFilter, filterColumns } from './filters.js';
 import type Database from 'better-sqlite3';
 import { getDomain } from 'tldts';
 import type { NativeBatch, NativeConnection, NativeFilters, NativeStats } from '@neko-master/shared';
@@ -6,7 +7,7 @@ export interface NativeWriteBatch { batch: NativeBatch; run: string; now: number
 type Row = Record<string, string | bigint>;
 const integer = (v: string | undefined) => BigInt(v || '0');
 export const addressIP = (s: string) => s.startsWith('[') ? s.slice(1, s.indexOf(']')) : s.replace(/:\d+$/, '');
-const DIMENSIONS: Record<string, string> = { source: 'source', domain: 'domain', rootDomain: 'root_domain', destination: 'destination', inbound: 'inbound', outbound: 'outbound', rule: 'rule' };
+const DIMENSIONS: Record<string, string> = filterColumns;
 const DAY = 86400000;
 
 /** Called only inside TrafficWriterRepository.batchUpdateTrafficStats's transaction. */
@@ -82,10 +83,11 @@ export function cleanupNative(db: Database.Database, now = Date.now()) {
   })();
 }
 
-function where(filters: NativeFilters, detail = false) {
+function where(db: Database.Database, filters: NativeFilters, detail = false) {
   const clauses: string[] = []; const params: (string | number)[] = [];
   for (const [key, col] of Object.entries(DIMENSIONS)) {
     const v = filters[key as keyof NativeFilters];
+    if (v !== undefined && typeof v !== 'string') throw new Error('Legacy filters require one text value');
     if (v) { clauses.push(`${col}=?`); params.push(v); }
   }
   if (detail) {
@@ -94,7 +96,8 @@ function where(filters: NativeFilters, detail = false) {
     if (filters.live === 'true') clauses.push('closed=0');
     else if (filters.live === 'false') clauses.push('closed>0');
   }
-  return { sql: clauses.length ? ' AND ' + clauses.join(' AND ') : '', params };
+  const advanced = compileFilter(db, filters.filter);
+  return { sql: (clauses.length ? ' AND ' + clauses.join(' AND ') : '') + advanced.sql, params: [...params, ...advanced.params] };
 }
 export function parseTime(s: string): number {
   const n = Date.parse(s);
@@ -116,7 +119,7 @@ export function queryNativeStats(db: Database.Database, backend: number, filters
   }
   const dimension = DIMENSIONS[filters.dimension || 'domain'];
   if (!dimension) throw new Error('Invalid dimension');
-  const f = where(filters);
+  const f = where(db, filters);
   const scope = !filters.from && !filters.to ? '(recovered=1 OR (bucket>=? AND bucket<?))' : 'recovered=0 AND bucket>=? AND bucket<?';
   const base = ` FROM sb_facts WHERE backend_id=? AND resolution=? AND ${scope}${f.sql}`;
   const args = [backend, resolution, from, to, ...f.params];
@@ -132,7 +135,7 @@ export function queryNativeStats(db: Database.Database, backend: number, filters
   return jsonRows({ rows, total, trend, recovered, granularity: resolution, from, to, stepMs: step });
 }
 export function queryNativeConnections(db: Database.Database, backend: number, filters: NativeFilters, exportAll = false) {
-  const f = where(filters, true);
+  const f = where(db, filters, true);
   const page = Number(filters.page || 0);
   if (!Number.isSafeInteger(page) || page < 0 || page > 1000000) throw new Error('Invalid page');
   const stmt = db.prepare(`SELECT *,upload-baseline_upload recorded_upload,download-baseline_download recorded_download FROM sb_connections WHERE backend_id=?${f.sql} ORDER BY created DESC${exportAll ? '' : ' LIMIT 100 OFFSET ?'}`).safeIntegers();
