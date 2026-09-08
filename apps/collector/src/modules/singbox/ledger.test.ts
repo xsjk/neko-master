@@ -82,6 +82,14 @@ describe('native lossless ledger', () => {
     write([], { run:'run2',reset:true,now:second+1000 });
     expect(fixture.db.getNativeDatabase().prepare('SELECT interrupted FROM sb_connections').get()).toEqual({ interrupted: 1 });
   });
+  it('reduces trend bucket width when zooming from a day to an hour', () => {
+    const end = Math.floor(Date.now() / 60000) * 60000;
+    const query = (hours: number) => queryNativeStats(fixture.db.getNativeDatabase(), backend, {
+      from: new Date(end - hours * 3600000).toISOString(), to: new Date(end).toISOString(),
+    });
+    expect(query(24).stepMs).toBe(360000);
+    expect(query(1).stepMs).toBe(60000);
+  });
   it('returns minute-aligned half-open bounds and excludes the end bucket', () => {
     const start = Math.floor(Date.now() / 60000) * 60000 - 600000;
     write([], { reset: true, now: start });

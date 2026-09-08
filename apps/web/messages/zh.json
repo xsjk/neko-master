@@ -650,6 +650,10 @@
     "exclusiveEnd": "不含结束时刻",
     "dragTimeHint": "在曲线上左右拖选可放大时间范围；Esc 取消。也可使用自定义时间输入。",
     "timeBack": "返回上一级",
-    "timeReset": "重置时间"
+    "timeReset": "重置时间",
+    "timeScale": "刻度：{tick} · 数据粒度：{bucket}",
+    "timeMinutes": "{count} 分钟",
+    "timeHours": "{count} 小时",
+    "timeDays": "{count} 天"
   }
 }

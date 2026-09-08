@@ -651,6 +651,10 @@
     "exclusiveEnd": "End exclusive",
     "dragTimeHint": "Drag horizontally to select and zoom; Esc cancels. You can also enter custom dates.",
     "timeBack": "Back",
-    "timeReset": "Reset time"
+    "timeReset": "Reset time",
+    "timeScale": "Ticks: {tick} · Data buckets: {bucket}",
+    "timeMinutes": "{count} min",
+    "timeHours": "{count} hr",
+    "timeDays": "{count} days"
   }
 }

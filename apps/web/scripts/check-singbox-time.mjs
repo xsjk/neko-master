@@ -26,6 +26,9 @@ try {
  const active=async()=>new URL(await page.getByRole('link',{name:'CSV',exact:true}).getAttribute('href'),'http://localhost').searchParams;
  const bounds=async()=>{await selection.waitFor();await selection.scrollIntoViewIfNeeded();return selection.boundingBox();};
  async function drag(a,b,escape=false){const box=await bounds();await page.mouse.move(box.x+box.width*a,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width*b,box.y+box.height/2,{steps:10});if(escape)await page.keyboard.press('Escape');await page.mouse.up();}
+ const scale=page.getByTestId('time-scale');
+ const originalTick=Number(await scale.getAttribute('data-tick-ms'));
+ const originalBucket=Number(await scale.getAttribute('data-bucket-ms'));
  const initial=latest().get('from');
  await drag(.2,.8);
  await page.waitForFunction(()=>document.querySelector('select[aria-label="时间范围"]').value==='custom');
@@ -36,6 +39,8 @@ try {
  await page.waitForFunction(value=>document.querySelector('input[aria-label="开始时间（上海）"]').value!==value,new Date(Date.parse(first)+28800000).toISOString().slice(0,16));
  await selection.waitFor();
  assert.ok(Date.parse(latest().get('from'))>Date.parse(first));
+ assert.ok(Number(await scale.getAttribute('data-tick-ms'))<originalTick);
+ assert.ok(Number(await scale.getAttribute('data-bucket-ms'))<originalBucket);
  await page.getByRole('button',{name:'返回上一级',exact:true}).click();await selection.waitFor();
  assert.equal((await active()).get('from'),first);assert.equal((await active()).get('to'),firstTo);
  await drag(.2,.7,true);assert.equal((await active()).get('from'),first);
@@ -50,6 +55,13 @@ try {
  await page.getByRole('button',{name:'应用时间',exact:true}).click();await selection.waitFor();
  assert.equal((await active()).get('from'),'2026-09-08T02:00:00.000Z');
  assert.equal((await active()).get('to'),'2026-09-08T03:00:00.000Z');
+ await page.getByLabel('开始时间（上海）',{exact:true}).fill('2026-09-08T10:00');
+ await page.getByLabel('结束时间（上海）',{exact:true}).fill('2026-09-08T10:05');
+ await page.getByRole('button',{name:'应用时间',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('[data-testid="time-scale"]')?.dataset.tickMs==='60000');
+ assert.equal(await scale.getAttribute('data-bucket-ms'),'60000');
+ const labels=await page.locator('.recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value').allTextContents();
+ assert.ok(labels.length>=4);assert.ok(labels.includes('10:01'));assert.ok(labels.every(label=>/^10:0[0-5]$/.test(label)));
  await page.getByRole('button',{name:'重置时间',exact:true}).click();await selection.waitFor();
  assert.equal(await page.getByLabel('时间范围',{exact:true}).inputValue(),'24');
  assert.equal(await page.getByRole('button',{name:'返回上一级',exact:true}).isDisabled(),true);
