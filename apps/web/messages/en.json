@@ -678,6 +678,8 @@
     "op_contains": "Contains text",
     "op_notContains": "Does not contain",
     "op_regex": "Matches regex",
-    "op_notRegex": "Does not match regex"
+    "op_notRegex": "Does not match regex",
+    "editFilters": "Edit filters",
+    "cancelFilters": "Cancel"
   }
 }

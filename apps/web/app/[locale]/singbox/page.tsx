@@ -116,8 +116,7 @@ export default function SingboxPage() {
       </div>
       {timeError && <p role="alert" className="text-sm text-destructive">{timeError}</p>}
       {stats.data && !('preset' in period && period.preset === 'all') && <p className="text-xs text-muted-foreground" data-testid="effective-time">{t('effectiveTime')}: {displayTime(stats.data.from)} → {displayTime(stats.data.to)} · {t('exclusiveEnd')}</p>}
-      <FilterBuilder key={JSON.stringify(expression)} value={expression} groups={status.data?.groups || []} onApply={value => { setExpression(value); setPage(0); }} onClear={() => { setExpression({ match: 'all', rules: [] }); setFilters({}); setPage(0); }} />
-      {Object.entries(filters).filter(([,v]) => v).map(([k,v]) => <Button className="mr-2" variant="secondary" key={k} onClick={() => { const next = { ...filters }; delete next[k]; setFilters(next); setPage(0); }}>{t(k)}: {v} ×</Button>)}
+      <FilterBuilder key={JSON.stringify(expression)} value={expression} exact={filters} onRemoveExact={field => { setFilters(old => { const next = { ...old }; delete next[field]; return next; }); setPage(0); }} groups={status.data?.groups || []} onApply={value => { setExpression(value); setPage(0); }} onClear={() => { setExpression({ match: 'all', rules: [] }); setFilters({}); setPage(0); }} />
     </CardContent></Card>
     {errorBox(stats.error, () => stats.refetch())}
     <div className="grid gap-6 lg:grid-cols-2">

@@ -14,24 +14,44 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) throw new Error(result.error || response.statusText);
   return result;
 }
-export function FilterBuilder({ value, groups, onApply, onClear }: {
-  value: NativeFilterExpression; groups: NativeGroup[]; onApply: (value: NativeFilterExpression) => void; onClear: () => void;
+export function FilterBuilder({ value, exact, groups, onApply, onClear, onRemoveExact }: {
+  value: NativeFilterExpression; exact: Record<string, string>; onRemoveExact: (field: string) => void; groups: NativeGroup[]; onApply: (value: NativeFilterExpression) => void; onClear: () => void;
 }) {
   const t = useTranslations("singbox");
   const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const options = useQuery({ queryKey: getNativeQueryKey("filter-options"), queryFn: () => json<Record<string, string[]>>("filter-options"), staleTime: 60000 });
+  const options = useQuery({ queryKey: getNativeQueryKey("filter-options"), queryFn: () => json<Record<string, string[]>>("filter-options"), staleTime: 60000, enabled: editing });
   const selectClass = "h-10 rounded-lg border border-input bg-background px-3 text-sm";
   const update = (index: number, patch: Partial<NativeFilterRule>) => setDraft(old => ({ ...old, rules: old.rules.map((rule, i) => i === index ? { ...rule, ...patch } : rule) }));
   const changed = JSON.stringify(value) !== JSON.stringify(draft);
   async function apply() {
     setPending(true); setError("");
-    try { onApply(await json<NativeFilterExpression>("filters/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filter: JSON.stringify(draft) }) })); }
+    try { onApply(await json<NativeFilterExpression>("filters/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filter: JSON.stringify(draft) }) })); setEditing(false); }
     catch (error) { setError(error instanceof Error ? error.message : String(error)); }
     finally { setPending(false); }
   }
+  function addRule() {
+    setDraft(old => ({ ...(editing ? old : value), rules: [...(editing ? old.rules : value.rules), { field: 'outbound', op: 'in', values: [] }] }));
+    setEditing(true); setError('');
+  }
+  const exactEntries = Object.entries(exact).filter(([, text]) => text);
+  function ruleLabel(rule: NativeFilterRule) {
+    const text = rule.values.map(text => text || t("unknown")).join(', ');
+    const operand = rule.op === 'in' ? text : rule.op === 'notIn' ? `≠ ${text}` : rule.op === 'contains' ? `${t('op_contains')} ${text}` : rule.op === 'notContains' ? `${t('op_notContains')} ${text}` : `${rule.op === 'notRegex' ? '!' : ''}/${text}/${rule.ignoreCase ? 'i' : ''}`;
+    return `${t(rule.field)}: ${operand}`;
+  }
+  const chip = (label: string, remove: () => void, key: string) => <Button key={key} type="button" variant="secondary" size="sm" className="max-w-full gap-2" title={label} disabled={pending} onClick={remove}><span className="max-w-72 truncate">{label}</span><span aria-hidden="true">×</span><span className="sr-only">{t('removeFilter')}</span></Button>;
+  const ruleChips = value.rules.map((rule, index) => chip(ruleLabel(rule), () => onApply({ ...value, rules: value.rules.filter((_, i) => i !== index) }), `rule-${index}`));
+  const groupedOr = value.match === 'any' && value.rules.length > 1;
   return <div className="space-y-3">
+    <div data-testid="active-filters" className="flex flex-wrap items-center gap-2">
+      {exactEntries.map(([field, text]) => chip(`${t(field)}: ${text}`, () => onRemoveExact(field), `exact-${field}`))}
+      {groupedOr ? <>{!!exactEntries.length && <span className="text-xs text-muted-foreground">AND</span>}<div role="group" aria-label={t('filterAny')} className="flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-dashed p-2"><span className="text-xs text-muted-foreground">OR</span>{ruleChips}</div></> : ruleChips}
+      {!editing && <><Button size="sm" variant="outline" disabled={value.rules.length >= 20} onClick={addRule}>{t('addFilterRule')}</Button>{!!value.rules.length && <Button size="sm" variant="ghost" onClick={() => { setDraft(value); setError(''); setEditing(true); }}>{t('editFilters')}</Button>}{(!!value.rules.length || !!exactEntries.length) && <Button size="sm" variant="ghost" onClick={onClear}>{t('clear')}</Button>}</>}
+    </div>
+    {editing && <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
     <div className="flex flex-wrap items-center gap-3"><select className={selectClass} aria-label={t("filterMatch")} value={draft.match} disabled={pending} onChange={event => setDraft({ ...draft, match: event.target.value as NativeFilterExpression['match'] })}><option value="all">{t("filterAll")}</option><option value="any">{t("filterAny")}</option></select><span className="text-xs text-muted-foreground">{changed ? t("filterUnapplied") : t("filterHelp")}</span></div>
     {draft.rules.map((rule, index) => {
       const multi = rule.op === "in" || rule.op === "notIn";
@@ -49,6 +69,7 @@ export function FilterBuilder({ value, groups, onApply, onClear }: {
     })}
     {options.error && <p className="text-xs text-muted-foreground">{t("filterOptionsError")} <Button size="sm" variant="ghost" onClick={() => options.refetch()}>{t("retry")}</Button></p>}
     {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
-    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || draft.rules.length >= 20} onClick={() => setDraft({ ...draft, rules: [...draft.rules, { field: 'outbound', op: 'in', values: [] }] })}>{t("addFilterRule")}</Button><Button disabled={pending} onClick={apply}>{pending ? t("loading") : t("apply")}</Button><Button variant="outline" disabled={pending} onClick={() => { setDraft({ match: 'all', rules: [] }); setError(''); onClear(); }}>{t("clear")}</Button></div>
+    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || draft.rules.length >= 20} onClick={addRule}>{t("addFilterRule")}</Button><Button disabled={pending} onClick={apply}>{pending ? t("loading") : t("apply")}</Button><Button variant="outline" disabled={pending} onClick={() => { setDraft(value); setError(''); setEditing(false); }}>{t("cancelFilters")}</Button></div>
+    </div>}
   </div>;
 }

@@ -677,6 +677,8 @@
     "op_contains": "包含文本",
     "op_notContains": "不包含文本",
     "op_regex": "匹配正则",
-    "op_notRegex": "不匹配正则"
+    "op_notRegex": "不匹配正则",
+    "editFilters": "编辑筛选",
+    "cancelFilters": "取消"
   }
 }
