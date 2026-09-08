@@ -6,11 +6,12 @@ import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { Activity, ArrowDown, ArrowUp, Database, Moon, Sun, Search, RefreshCw, Network, Download } from "lucide-react";
 import { TrafficTrend, displayTime } from "@/components/features/singbox/traffic-trend";
-import type { NativeStats, NativeStatus } from "@neko-master/shared";
+import type { NativeStats, NativeStatus, NativeFilterExpression } from "@neko-master/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FilterBuilder } from "@/components/features/singbox/filter-builder";
 import { NodeGroups } from "@/components/features/singbox/node-groups";
 import { getNativeQueryKey } from "@/lib/stats-query-keys";
 
@@ -50,7 +51,7 @@ export default function SingboxPage() {
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 60000); return () => clearInterval(timer); }, []);
   const [dimension, setDimension] = useState('domain');
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [expression, setExpression] = useState<NativeFilterExpression>({ match: 'all', rules: [] });
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [live, setLive] = useState('all');
@@ -72,6 +73,7 @@ export default function SingboxPage() {
   }
   function parameters() {
     const p = new URLSearchParams(filters);
+    if (expression.rules.length) p.set('filter', JSON.stringify(expression));
     const now = Math.floor(clock / 60000) * 60000;
     const interval = 'from' in period ? period : period.preset === 'all' ? null : normalizePeriod(now - Number(period.preset) * 3600000, now + 60000, clock);
     if (interval) { p.set('from', new Date(interval.from).toISOString()); p.set('to', new Date(interval.to).toISOString()); }
@@ -88,7 +90,7 @@ export default function SingboxPage() {
   const selectClass = 'h-10 rounded-lg border border-input bg-background px-3 text-sm';
   const metric = (label: string, value: string, icon: React.ReactNode, sub: string) => <Card><CardContent className="space-y-3"><div className="flex justify-between text-sm text-muted-foreground">{label}{icon}</div><div className="text-3xl font-semibold tracking-tight tabular-nums">{value}</div><p className="text-xs text-muted-foreground">{sub}</p></CardContent></Card>;
   function drill(label: string) {
-    const next = { ...filters, [dimension]: label }; setFilters(next); setDraft(next); setPage(0);
+    const next = { ...filters, [dimension]: label }; setFilters(next); setPage(0);
     if (dimension === 'source') setDimension('domain'); else if (dimension === 'domain' || dimension === 'rootDomain') setDimension('source');
   }
   function errorBox(error: Error | null, retry: () => void) { return error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-destructive p-4 text-sm text-destructive">{error.message}<Button variant="outline" onClick={retry}>{t('retry')}</Button></div>; }
@@ -114,8 +116,8 @@ export default function SingboxPage() {
       </div>
       {timeError && <p role="alert" className="text-sm text-destructive">{timeError}</p>}
       {stats.data && !('preset' in period && period.preset === 'all') && <p className="text-xs text-muted-foreground" data-testid="effective-time">{t('effectiveTime')}: {displayTime(stats.data.from)} → {displayTime(stats.data.to)} · {t('exclusiveEnd')}</p>}
-      <form className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4" onSubmit={e => { e.preventDefault(); setFilters(draft); setPage(0); }}>{dimensions.filter(d => d !== 'rootDomain').map(d => <Input key={d} aria-label={t(d)} placeholder={t(d)} value={draft[d] || ''} onChange={e => setDraft({ ...draft, [d]: e.target.value })} />)}<Button type="submit">{t('apply')}</Button><Button variant="outline" type="button" onClick={() => { setDraft({}); setFilters({}); setPage(0); }}>{t('clear')}</Button></form>
-      {Object.entries(filters).filter(([,v]) => v).map(([k,v]) => <Button className="mr-2" variant="secondary" key={k} onClick={() => { const next = { ...filters }; delete next[k]; setFilters(next); setDraft(next); }}>{t(k)}: {v} ×</Button>)}
+      <FilterBuilder key={JSON.stringify(expression)} value={expression} groups={status.data?.groups || []} onApply={value => { setExpression(value); setPage(0); }} onClear={() => { setExpression({ match: 'all', rules: [] }); setFilters({}); setPage(0); }} />
+      {Object.entries(filters).filter(([,v]) => v).map(([k,v]) => <Button className="mr-2" variant="secondary" key={k} onClick={() => { const next = { ...filters }; delete next[k]; setFilters(next); setPage(0); }}>{t(k)}: {v} ×</Button>)}
     </CardContent></Card>
     {errorBox(stats.error, () => stats.refetch())}
     <div className="grid gap-6 lg:grid-cols-2">
