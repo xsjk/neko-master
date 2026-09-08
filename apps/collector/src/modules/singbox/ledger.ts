@@ -110,6 +110,9 @@ export function queryNativeStats(db: Database.Database, backend: number, filters
   if (resolution === 'day') {
     from = Math.floor((from + 28800000) / DAY) * DAY - 28800000;
     to = Math.ceil((to + 28800000) / DAY) * DAY - 28800000;
+  } else {
+    from = Math.floor(from / 60000) * 60000;
+    to = Math.ceil(to / 60000) * 60000;
   }
   const dimension = DIMENSIONS[filters.dimension || 'domain'];
   if (!dimension) throw new Error('Invalid dimension');
@@ -121,9 +124,12 @@ export function queryNativeStats(db: Database.Database, backend: number, filters
   const rows = db.prepare(`SELECT ${dimension} label,${sums}${base} GROUP BY ${dimension} ORDER BY SUM(upload)+SUM(download) DESC LIMIT 100`).safeIntegers().all(...args);
   const total = db.prepare(`SELECT ${sums}${base}`).safeIntegers().get(...args);
   const step = resolution === 'day' ? DAY : Math.max(60000, Math.ceil((to - from) / 240 / 60000) * 60000);
-  const trend = db.prepare(`SELECT CAST(bucket / ? AS INTEGER)*? bucket,${sums}${base} AND recovered=0 GROUP BY 1 ORDER BY 1`).safeIntegers().all(step, step, ...args);
+  // Daily facts already start at Shanghai midnight; UTC rebucketing shifts them.
+  const trend = resolution === 'day'
+    ? db.prepare(`SELECT bucket,${sums}${base} AND recovered=0 GROUP BY bucket ORDER BY bucket`).safeIntegers().all(...args)
+    : db.prepare(`SELECT CAST(bucket / ? AS INTEGER)*? bucket,${sums}${base} AND recovered=0 GROUP BY 1 ORDER BY 1`).safeIntegers().all(step, step, ...args);
   const recovered = db.prepare(`SELECT ${sums} FROM sb_facts WHERE backend_id=? AND resolution='day' AND recovered=1${f.sql}`).safeIntegers().get(backend, ...f.params);
-  return jsonRows({ rows, total, trend, recovered, granularity: resolution });
+  return jsonRows({ rows, total, trend, recovered, granularity: resolution, from, to, stepMs: step });
 }
 export function queryNativeConnections(db: Database.Database, backend: number, filters: NativeFilters, exportAll = false) {
   const f = where(filters, true);

@@ -25,6 +25,8 @@ export interface NativeStats {
   total: { upload: string; download: string; connections: string };
   recovered: { upload: string; download: string };
   granularity: 'minute' | 'day';
+  /** Effective half-open query interval and chart bucket width, in milliseconds. */
+  from: number; to: number; stepMs: number;
 }
 export interface NativeStatus {
   connected: boolean; error: string; backend: number; run: string;
