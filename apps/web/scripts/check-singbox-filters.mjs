@@ -10,7 +10,7 @@ try {
  await page.route('**/api/singbox/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path.endsWith('/status'))return route.fulfill({json:{connected:true,error:'',backend:1,run:'test',meta:{since:now,last_commit:now},totals:{uplinkTotal:'0',downlinkTotal:'0'},gaps:[],databaseBytes:0,groups:[]}});
-  if(path.endsWith('/filter-options'))return route.fulfill({json:{outbound:['node-a','node-b','direct'],inbound:['mixed'],rule:['final']}});
+  if(path.endsWith('/filter-options'))return route.fulfill({json:{outbound:['node-a','node-b','direct','direct-out'],inbound:['mixed'],rule:['final']}});
   if(path.endsWith('/filters/validate')) {
    const value=JSON.parse(route.request().postDataJSON().filter);
    if(value.rules.some(rule=>rule.values.includes('[')))return route.fulfill({status:400,json:{error:'Invalid RE2 expression'}});
@@ -79,5 +79,27 @@ try {
  await page.getByLabel('条件 1 字段',{exact:true}).selectOption('source');await page.getByLabel('条件 1 值',{exact:true}).fill('10.15.171.64');
  await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('来源 IP: 10.15.171.64',{exact:true}).waitFor();
  assert.equal(await page.locator('fieldset').count(),0);
+ await page.getByRole('button',{name:'清除筛选',exact:true}).click();
+ await page.getByRole('button',{name:'添加条件',exact:true}).click();
+ await page.getByLabel('条件 1 匹配方式',{exact:true}).selectOption('contains');
+ await page.getByLabel('条件 1 匹配方式',{exact:true}).selectOption('notIn');
+ await page.getByText('选择已有值',{exact:true}).click();
+ await page.getByRole('checkbox',{name:'direct-out',exact:true}).check();
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['direct-out']);
+ await page.getByRole('button',{name:'编辑筛选',exact:true}).click();
+ await page.getByLabel('条件 1 值',{exact:true}).fill('\n  \ndirect-out\ndirect-out\n');
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['direct-out']);
+ await page.getByRole('button',{name:'编辑筛选',exact:true}).click();
+ await page.getByText('选择已有值',{exact:true}).click();
+ await page.getByRole('checkbox',{name:'未识别',exact:true}).check();
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out, 未识别',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['direct-out','']);
+ await page.getByRole('button',{name:'编辑筛选',exact:true}).click();await page.getByText('选择已有值',{exact:true}).click();
+ assert.equal(await page.getByRole('checkbox',{name:'未识别',exact:true}).isChecked(),true);
+ await page.getByRole('checkbox',{name:'未识别',exact:true}).uncheck();
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['direct-out']);
  assert.deepEqual(errors,[]);console.log('Passed multi-select, exclusions, regex, invalid draft preservation, AND/OR, clear, drill-down, exports, compact removable chips, cancelled edits and mobile layout.');
 }finally{await browser.close();}
