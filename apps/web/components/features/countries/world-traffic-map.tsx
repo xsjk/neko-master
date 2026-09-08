@@ -18,6 +18,7 @@ import type { CountryStats } from "@neko-master/shared";
 
 interface WorldTrafficMapProps {
   data: CountryStats[];
+  onSelect?: (country: string) => void;
 }
 
 // World map GeoJSON URL (lightweight topojson)
@@ -63,7 +64,7 @@ const MAP_THEME = {
   },
 } as const;
 
-export function WorldTrafficMap({ data }: WorldTrafficMapProps) {
+export function WorldTrafficMap({ data, onSelect }: WorldTrafficMapProps) {
   const t = useTranslations("map");
   const { resolvedTheme } = useTheme();
   const mapTheme = resolvedTheme === "dark" ? MAP_THEME.dark : MAP_THEME.light;
@@ -224,6 +225,7 @@ export function WorldTrafficMap({ data }: WorldTrafficMapProps) {
                       }}
                       onMouseEnter={(event) => handleMouseEnter(geo, event)}
                       onMouseLeave={handleMouseLeave}
+                      onClick={() => { const country = countryMap.get(geo.properties.ISO_A2 || geo.properties.iso_a2) || countryMap.get(geo.properties.name); if (country) onSelect?.(country.country); }}
                     />
                   ))
                 }

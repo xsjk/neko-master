@@ -26,6 +26,7 @@ import type { DomainStats } from "@neko-master/shared";
 
 interface TopDomainsChartProps {
   data?: DomainStats[];
+  onSelect?: (domain: string) => void;
   activeBackendId?: number;
   timeRange?: TimeRange;
 }
@@ -89,7 +90,7 @@ function renderCustomBarLabel(props: any) {
   );
 }
 
-export function TopDomainsChart({ data, activeBackendId, timeRange }: TopDomainsChartProps) {
+export function TopDomainsChart({ data, activeBackendId, timeRange, onSelect }: TopDomainsChartProps) {
   const t = useTranslations("domains");
   const commonT = useTranslations("stats");
   const [topN, setTopN] = useState<TopOption>(10);
@@ -282,6 +283,7 @@ export function TopDomainsChart({ data, activeBackendId, timeRange }: TopDomains
                 cursor={{ fill: "rgba(128, 128, 128, 0.1)" }}
               />
               <Bar
+                onClick={(_, index) => onSelect?.(chartData[index].fullDomain)}
                 dataKey="download"
                 stackId="traffic"
                 radius={[0, 0, 0, 0]}
@@ -296,6 +298,7 @@ export function TopDomainsChart({ data, activeBackendId, timeRange }: TopDomains
                 ))}
               </Bar>
               <Bar
+                onClick={(_, index) => onSelect?.(chartData[index].fullDomain)}
                 dataKey="upload"
                 stackId="traffic"
                 radius={[0, 4, 4, 0]}

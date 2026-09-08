@@ -46,6 +46,8 @@ import { useGatewayRules } from "@/hooks/api/use-rules";
 
 interface MergedChainNode {
   name: string;
+  rawName?: string;
+  badge?: string;
   layer: number;
   nodeType: "rule" | "group" | "proxy" | "direct";
   totalUpload: number;
@@ -55,7 +57,7 @@ interface MergedChainNode {
   _zeroTraffic?: boolean;
 }
 
-interface AllChainFlowData {
+export interface AllChainFlowData {
   nodes: MergedChainNode[];
   links: Array<{ source: number; target: number; rules: string[] }>;
   rulePaths: Record<string, { nodeIndices: number[]; linkIndices: number[] }>;
@@ -215,7 +217,7 @@ const MergedChainNodeComponent = memo(function MergedChainNodeComponent({
     return (
       <div className="relative" style={wrapStyle}>
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-semibold tracking-wider z-10 shadow-sm">
-          PROXY
+          {data.badge || 'PROXY'}
         </div>
         <div className="relative px-5 py-3.5 rounded-xl border border-emerald-400/50 bg-gradient-to-br from-emerald-50 to-teal-50/50 dark:from-emerald-500/15 dark:to-emerald-500/5 min-w-[170px] shadow-md shadow-emerald-500/10 ring-1 ring-emerald-500/10">
           <Handle
@@ -366,6 +368,8 @@ const MergedChainNodeComponent = memo(function MergedChainNodeComponent({
   const nd = next.data;
   return (
     pd.name === nd.name &&
+    pd.rawName === nd.rawName &&
+    pd.badge === nd.badge &&
     pd.nodeType === nd.nodeType &&
     pd.totalUpload === nd.totalUpload &&
     pd.totalDownload === nd.totalDownload &&
@@ -546,12 +550,14 @@ function FlowRenderer({
   showAll,
   isFullscreen,
   onToggleFullscreen,
+  onSelect,
 }: {
   data: AllChainFlowData;
   selectedRule: string | null;
   showAll: boolean;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onSelect?: (field: 'rule' | 'outbound', value: string) => void;
 }) {
   const { fitView } = useReactFlow();
   const { resolvedTheme } = useTheme();
@@ -609,6 +615,8 @@ function FlowRenderer({
           const prevData = node.data as unknown as (MergedChainNode & { dimmed?: boolean });
           if (
             prevData.name === freshNode.name &&
+            prevData.rawName === freshNode.rawName &&
+            prevData.badge === freshNode.badge &&
             prevData.layer === freshNode.layer &&
             prevData.nodeType === freshNode.nodeType &&
             prevData.totalUpload === freshNode.totalUpload &&
@@ -878,6 +886,7 @@ function FlowRenderer({
   return (
     <ReactFlow
       nodes={nodes}
+      onNodeClick={(_, node) => { const info = node.data; if (info.nodeType === 'rule' || info.nodeType === 'proxy' || info.nodeType === 'direct') onSelect?.(info.nodeType === 'rule' ? 'rule' : 'outbound', String(info.rawName ?? info.name)); }}
       edges={edges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
@@ -1628,3 +1637,17 @@ export const UnifiedRuleChainFlow = memo(
 
 // Backward-compatible alias
 export { UnifiedRuleChainFlow as RuleChainFlow };
+
+/** Shared renderer for externally supplied, historically observed paths. */
+export function RuleChainDiagram({ data, onSelect }: { data: AllChainFlowData; onSelect?: (field: 'rule' | 'outbound', value: string) => void }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setFullscreen(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [fullscreen]);
+  return <div className={fullscreen ? "fixed inset-4 z-50 rounded-xl border bg-background" : "h-[520px] min-w-0 rounded-xl border bg-background"}>
+    <ReactFlowProvider><MemoizedFlowRenderer data={data} selectedRule={null} showAll={true} isFullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(old => !old)} onSelect={onSelect} /></ReactFlowProvider>
+  </div>;
+}

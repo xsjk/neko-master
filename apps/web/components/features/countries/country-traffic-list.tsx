@@ -9,6 +9,8 @@ import type { CountryStats } from "@neko-master/shared";
 
 interface CountryTrafficListProps {
   data: CountryStats[];
+  onSelect?: (country: string) => void;
+  includeUnknown?: boolean;
   sortBy?: "traffic" | "connections";
 }
 
@@ -25,13 +27,15 @@ function getContinentColor(continent: string): string {
 
 export function CountryTrafficList({
   data,
+  onSelect,
+  includeUnknown = false,
   sortBy = "traffic",
 }: CountryTrafficListProps) {
   const countryName = useCountryName();
   const countries = useMemo(() => {
     if (!data) return [];
     return data
-      .filter(c => c.country !== "LOCAL" && c.country !== "Unknown")
+      .filter(c => includeUnknown || (c.country !== "LOCAL" && c.country !== "Unknown"))
       .map((country) => ({
         ...country,
         color: getContinentColor(country.continent),
@@ -43,7 +47,7 @@ export function CountryTrafficList({
         }
         return b.total - a.total;
       });
-  }, [data, sortBy]);
+  }, [data, sortBy, includeUnknown]);
 
   const totalTraffic = useMemo(() => {
     return countries.reduce((sum, c) => sum + c.total, 0);
@@ -67,6 +71,10 @@ export function CountryTrafficList({
         return (
           <div
             key={country.country}
+            role={onSelect ? "button" : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+            onClick={() => onSelect?.(country.country)}
+            onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect?.(country.country); } }}
             className="p-3 rounded-xl border border-border/50 bg-card/50 hover:bg-card transition-colors"
           >
             {/* Header: Flag + Name + Total */}
