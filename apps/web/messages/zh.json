@@ -564,6 +564,19 @@
     "checkInterval": "系统每分钟记录一次健康检查结果，数据空缺表示采集服务中断"
   },
   "singbox": {
+    "country": "国家 / 地区",
+    "tab_overview": "概览",
+    "tab_domains": "域名",
+    "tab_rules": "规则",
+    "tab_countries": "地区",
+    "tab_connections": "连接",
+    "tab_nodes": "节点",
+    "chainFlow": "规则链路流向",
+    "chainCoverage": "未记录链路的流量：{bytes}。升级前的数据无法还原路径。",
+    "chainTruncated": "展示流量最多的 1000 条路径。",
+    "geoUnavailable": "本地地理数据库未就绪，暂时无法识别国家。",
+    "geoHelp": "按目标 IP 所在国家统计；历史记录使用当前本地数据库解析。",
+
     "title": "流量账本",
     "subtitle": "Neko Master · sing-box 原生采集",
     "online": "正在采集",

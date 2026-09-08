@@ -565,6 +565,19 @@
     "checkInterval": "Health checks are recorded once per minute. Gaps indicate the collector service was interrupted."
   },
   "singbox": {
+    "country": "Country / region",
+    "tab_overview": "Overview",
+    "tab_domains": "Domains",
+    "tab_rules": "Rules",
+    "tab_countries": "Regions",
+    "tab_connections": "Connections",
+    "tab_nodes": "Nodes",
+    "chainFlow": "Rule chain flow",
+    "chainCoverage": "Traffic without recorded paths: {bytes}. Paths before this upgrade cannot be reconstructed.",
+    "chainTruncated": "Showing the 1000 busiest paths.",
+    "geoUnavailable": "The local geolocation database is not ready; countries are unavailable.",
+    "geoHelp": "Traffic by destination IP country; historical records use the current local database.",
+
     "title": "Traffic ledger",
     "subtitle": "Neko Master · sing-box native collection",
     "online": "Collecting",

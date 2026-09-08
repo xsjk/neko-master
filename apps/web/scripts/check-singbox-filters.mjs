@@ -75,6 +75,7 @@ try {
  await page.getByRole('button',{name:'添加条件',exact:true}).click();await page.getByLabel('条件 2 值',{exact:true}).fill('node-a');
  await page.getByRole('button',{name:'应用筛选',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('a[href*="format=csv"]').href.includes('filter='));
+ await page.waitForFunction(()=>JSON.parse(new URL(document.querySelector('a[href*="format=csv"]').href).searchParams.get('filter')).rules.length===2);
  assert.equal((await applied()).get('domain'),null);assert.equal((await expression()).rules[1].values[0],'node-a');
  await chips.getByTitle('域名: edited.example.com',{exact:true}).click();
  assert.equal((await applied()).get('domain'),null);assert.equal((await expression()).rules.length,1);
