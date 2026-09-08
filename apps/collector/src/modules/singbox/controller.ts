@@ -1,15 +1,17 @@
+import { loadNativeCountry, nativeCountryStatus } from './country.js';
 import { parseFilter, filterColumns } from './filters.js';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { Readable } from 'node:stream';
 import type { NativeFilters } from '@neko-master/shared';
 import { NativeService } from './service.js';
-import { queryNativeConnections, queryNativeStats } from './ledger.js';
+import { queryNativeConnections, queryNativeStats, queryNativeChains } from './ledger.js';
 
 export const singboxController: FastifyPluginAsync = async app => {
   const address = process.env.SINGBOX_ADDRESS;
   if (!address) return;
   const service = new NativeService(app.db, address, process.env.SINGBOX_SECRET || '');
+  await loadNativeCountry(process.env.SINGBOX_COUNTRY_MMDB);
   service.start();
   app.addHook('onClose', async () => service.stop());
   const sql = app.db.getNativeDatabase();
@@ -27,6 +29,8 @@ export const singboxController: FastifyPluginAsync = async app => {
   app.get('/filter-options', async () => Object.fromEntries(['outbound', 'inbound', 'rule'].map(field => [field,
     sql.prepare(`SELECT DISTINCT ${filterColumns[field as keyof typeof filterColumns]} value FROM sb_facts WHERE backend_id=? AND resolution='day' ORDER BY value LIMIT 200`).all(service.backend).map(row => (row as { value: string }).value),
   ])));
+  app.get<{ Querystring: NativeFilters }>('/countries', async req => ({ ...queryNativeStats(sql, service.backend, {...req.query, dimension:'country'}), geo: nativeCountryStatus() }));
+  app.get<{ Querystring: NativeFilters }>('/rule-chains', async req => queryNativeChains(sql, service.backend, req.query));
   app.get('/groups', async () => service.getGroups());
   app.post<{ Body: { tag: string } }>('/groups/url-test', async req => {
     if (typeof req.body?.tag !== 'string' || !req.body.tag.trim()) throw new Error('tag is required');

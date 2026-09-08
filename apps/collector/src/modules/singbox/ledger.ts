@@ -1,3 +1,4 @@
+import { registerNativeCountry } from './country.js';
 import { compileFilter, filterColumns } from './filters.js';
 import type Database from 'better-sqlite3';
 import { getDomain } from 'tldts';
@@ -7,7 +8,7 @@ export interface NativeWriteBatch { batch: NativeBatch; run: string; now: number
 type Row = Record<string, string | bigint>;
 const integer = (v: string | undefined) => BigInt(v || '0');
 export const addressIP = (s: string) => s.startsWith('[') ? s.slice(1, s.indexOf(']')) : s.replace(/:\d+$/, '');
-const DIMENSIONS: Record<string, string> = filterColumns;
+const DIMENSIONS: Record<string, string> = { ...filterColumns, chain: 'chain' };
 const DAY = 86400000;
 
 /** Called only inside TrafficWriterRepository.batchUpdateTrafficStats's transaction. */
@@ -22,7 +23,7 @@ export function applyNativeBatch(db: Database.Database, backend: number, input: 
     (backend_id,run,id,source,destination,domain,root_domain,inbound,outbound,rule,network,user,chain,created,closed,upload,download,baseline_upload,baseline_download)
     VALUES (@backend,@run,@id,@source,@destination,@domain,@root_domain,@inbound,@outbound,@rule,@network,@user,@chain,@created,@closed,@upload,@download,@baseline_upload,@baseline_download)`);
   const update = db.prepare('UPDATE sb_connections SET upload=?,download=?,closed=? WHERE backend_id=? AND run=? AND id=?');
-  const fact = db.prepare(`INSERT INTO sb_facts VALUES(@backend,@resolution,@bucket,@source,@domain,@root_domain,@destination,@inbound,@outbound,@rule,@recovered,@upload,@download,@connections)
+  const fact = db.prepare(`INSERT INTO sb_facts VALUES(@backend,@resolution,@bucket,@source,@domain,@root_domain,@destination,@inbound,@outbound,@rule,@chain,@recovered,@upload,@download,@connections)
     ON CONFLICT DO UPDATE SET upload=upload+excluded.upload,download=download+excluded.download,connections=connections+excluded.connections`);
   for (const event of batch.events) {
     let old = existing.get(backend, run, event.id) as Row | undefined;
@@ -64,7 +65,7 @@ export function applyNativeBatch(db: Database.Database, backend: number, input: 
     }
     if (!diffUp && !diffDown && !count) continue;
     const values = { backend, source: old.source, destination: old.destination, domain: old.domain,
-      root_domain: old.root_domain, inbound: old.inbound, outbound: old.outbound, rule: old.rule,
+      root_domain: old.root_domain, inbound: old.inbound, outbound: old.outbound, rule: old.rule, chain: old.chain,
       recovered: recovered ? 1 : 0, upload: diffUp, download: diffDown, connections: count };
     // Recovered bytes have a separate bucket; their original timing is unknown.
     for (const resolution of ['minute', 'day']) {
@@ -84,8 +85,9 @@ export function cleanupNative(db: Database.Database, now = Date.now()) {
 }
 
 function where(db: Database.Database, filters: NativeFilters, detail = false) {
+  registerNativeCountry(db);
   const clauses: string[] = []; const params: (string | number)[] = [];
-  for (const [key, col] of Object.entries(DIMENSIONS)) {
+  for (const [key, col] of Object.entries(filterColumns)) {
     const v = filters[key as keyof NativeFilters];
     if (v !== undefined && typeof v !== 'string') throw new Error('Legacy filters require one text value');
     if (v) { clauses.push(`${col}=?`); params.push(v); }
@@ -124,7 +126,7 @@ export function queryNativeStats(db: Database.Database, backend: number, filters
   const base = ` FROM sb_facts WHERE backend_id=? AND resolution=? AND ${scope}${f.sql}`;
   const args = [backend, resolution, from, to, ...f.params];
   const sums = 'COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(connections),0) connections';
-  const rows = db.prepare(`SELECT ${dimension} label,${sums}${base} GROUP BY ${dimension} ORDER BY SUM(upload)+SUM(download) DESC LIMIT 100`).safeIntegers().all(...args);
+  const rows = db.prepare(`SELECT ${dimension} label,${sums}${base} GROUP BY ${dimension} ORDER BY SUM(upload)+SUM(download) DESC LIMIT ${filters.dimension === 'country' ? 300 : filters.dimension === 'chain' ? 1000 : 100}`).safeIntegers().all(...args);
   const total = db.prepare(`SELECT ${sums}${base}`).safeIntegers().get(...args);
   const step = resolution === 'day' ? DAY : Math.max(60000, Math.ceil((to - from) / 240 / 60000) * 60000);
   // Fetch one complete bucket beyond the viewport so the line reaches its right edge.
@@ -144,4 +146,18 @@ export function queryNativeConnections(db: Database.Database, backend: number, f
   const stmt = db.prepare(`SELECT *,upload-baseline_upload recorded_upload,download-baseline_download recorded_download FROM sb_connections WHERE backend_id=?${f.sql} ORDER BY created DESC${exportAll ? '' : ' LIMIT 100 OFFSET ?'}`).safeIntegers();
   const args = exportAll ? [backend, ...f.params] : [backend, ...f.params, page * 100];
   return exportAll ? stmt.iterate(...args) : jsonRows(stmt.all(...args));
+}
+
+export function queryNativeChains(db: Database.Database, backend: number, filters: NativeFilters) {
+  const stats = queryNativeStats(db, backend, { ...filters, dimension: 'chain' });
+  const f = where(db, filters);
+  const scope = !filters.from && !filters.to ? '(recovered=1 OR (bucket>=? AND bucket<?))' : 'recovered=0 AND bucket>=? AND bucket<?';
+  const rows = db.prepare(`SELECT rule,chain, SUM(upload) upload,SUM(download) download,SUM(connections) connections
+    FROM sb_facts WHERE backend_id=? AND resolution=? AND ${scope}${f.sql}
+    GROUP BY rule,chain ORDER BY SUM(upload)+SUM(download) DESC LIMIT 1001`).safeIntegers()
+    .all(backend, stats.granularity, stats.from, stats.to, ...f.params) as {rule:string;chain:string;upload:bigint;download:bigint;connections:bigint}[];
+  const unrecorded = db.prepare(`SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(connections),0) connections
+    FROM sb_facts WHERE backend_id=? AND resolution=? AND ${scope}${f.sql} AND chain IN ('','[]')`).safeIntegers()
+    .get(backend, stats.granularity, stats.from, stats.to, ...f.params);
+  return jsonRows({ ...stats, paths: rows.slice(0,1000).filter(row => row.chain && row.chain !== '[]').map(row => ({...row,chain:JSON.parse(row.chain)})), unrecorded, truncated: rows.length > 1000 });
 }

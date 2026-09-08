@@ -13,7 +13,7 @@ export interface NativeBatch { events: NativeEvent[]; reset: boolean }
 export interface NativeFilters {
   from?: string; to?: string; source?: string; domain?: string; rootDomain?: string;
   destination?: string; inbound?: string; outbound?: string; rule?: string;
-  dimension?: string; page?: string; live?: string; filter?: string;
+  country?: string; dimension?: string; page?: string; live?: string; filter?: string;
 }
 export interface NativeGroup {
   tag: string; type: string; selectable: boolean; selected: string;
@@ -43,7 +43,7 @@ export interface NativeLatencyResult {
   testedAt: string;
 }
 
-export const nativeFilterFields = ['source', 'domain', 'rootDomain', 'destination', 'inbound', 'outbound', 'rule'] as const;
+export const nativeFilterFields = ['source', 'domain', 'rootDomain', 'destination', 'inbound', 'outbound', 'rule', 'country'] as const;
 export const nativeFilterOperators = ['in', 'notIn', 'contains', 'notContains', 'regex', 'notRegex'] as const;
 export interface NativeFilterRule {
   field: typeof nativeFilterFields[number];
@@ -52,3 +52,10 @@ export interface NativeFilterRule {
   ignoreCase?: boolean;
 }
 export interface NativeFilterExpression { match: 'all' | 'any'; rules: NativeFilterRule[] }
+
+export interface NativeChainStats extends NativeStats {
+  paths: { rule: string; chain: string[]; upload: string; download: string; connections: string }[];
+  unrecorded: { upload: string; download: string; connections: string };
+  truncated: boolean;
+}
+export interface NativeCountryStats extends NativeStats { geo: { ready: boolean; error: string | null } }

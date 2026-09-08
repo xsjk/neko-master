@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { NativeBatch, NativeConnection, NativeEvent } from '@neko-master/shared';
 import { createTestBackend, createTestDatabase } from '../../__tests__/helpers.js';
 import { StatsDatabase } from '../db/db.js';
-import { cleanupNative, queryNativeStats, queryNativeConnections, addressIP } from './ledger.js';
+import { cleanupNative, queryNativeChains, queryNativeStats, queryNativeConnections, addressIP } from './ledger.js';
 
 let fixture: ReturnType<typeof createTestDatabase>;
 let backend: number;
@@ -151,6 +151,42 @@ describe('native lossless ledger', () => {
       expect(queryNativeStats(reopened.getNativeDatabase(), backend, {}).total.download).toBe('100');
       expect((sql.prepare("SELECT sql FROM sqlite_master WHERE name='sb_facts'").get() as {sql:string}).sql).toContain('WITHOUT ROWID');
     } finally { reopened.close(); }
+  });
+
+  it('preserves different observed paths within a minute and filters them by rule', () => {
+    const now = Math.floor(Date.now()/60000)*60000;
+    write([], {reset:true,now});
+    write([event(connection('a','10','100',{chainList:['node-a','auto']})),event(connection('b','20','200',{chainList:['node-a','manual'],rule:'other'}))],{now});
+    const query = {from:new Date(now).toISOString(),to:new Date(now+60000).toISOString()};
+    const result = queryNativeChains(fixture.db.getNativeDatabase(),backend,query);
+    expect(result.total.download).toBe('300');
+    expect(result.paths.map((path: {chain:string[]})=>path.chain)).toEqual([['node-a','manual'],['node-a','auto']]);
+    expect(result.unrecorded.download).toBe('0');
+    expect(queryNativeChains(fixture.db.getNativeDatabase(),backend,{...query,filter:JSON.stringify({match:'all',rules:[{field:'rule',op:'in',values:['final']}]})}).paths).toHaveLength(1);
+    write([event(connection('a','10','100',{chainList:['node-a','auto']}))],{now,reset:true});
+    expect(queryNativeChains(fixture.db.getNativeDatabase(),backend,query).total.download).toBe('300');
+  });
+  it('migrates pre-chain facts without assigning historical connection paths', () => {
+    write([], {reset:true});write([event(connection('a','10','100'))]);
+    const db = fixture.db.getNativeDatabase();
+    const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE name='sb_facts'").get() as {sql:string}).sql;
+    db.exec(ddl.replace('sb_facts','old_facts').replace("chain TEXT NOT NULL DEFAULT '', ",'').replace('rule,chain,recovered','rule,recovered'));
+    const columns = (db.prepare('PRAGMA table_info(old_facts)').all() as {name:string}[]).map(c=>c.name).join(',');
+    db.exec(`INSERT INTO old_facts SELECT ${columns} FROM sb_facts; DROP TABLE sb_facts; ALTER TABLE old_facts RENAME TO sb_facts`);
+    const reopened = new StatsDatabase(db.name);
+    try {
+      const result = queryNativeChains(reopened.getNativeDatabase(),backend,{});
+      expect(result.total.download).toBe('100');expect(result.unrecorded.download).toBe('100');expect(result.paths).toEqual([]);
+    } finally {reopened.close();}
+  });
+  it('uses the same country filter for facts, details and export readers', () => {
+    write([], {reset:true});
+    write([event(connection('local','10','100',{destination:'192.168.2.1:443'})),event(connection('public','20','200'))]);
+    const filter=JSON.stringify({match:'all',rules:[{field:'country',op:'in',values:['LOCAL']}]});
+    const db=fixture.db.getNativeDatabase();
+    expect(queryNativeStats(db,backend,{filter,dimension:'country'}).rows[0]).toMatchObject({label:'LOCAL',download:'100'});
+    expect(queryNativeConnections(db,backend,{filter})).toHaveLength(1);
+    expect([...queryNativeConnections(db,backend,{filter},true)]).toHaveLength(1);
   });
 
 });

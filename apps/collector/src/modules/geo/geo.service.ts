@@ -663,3 +663,9 @@ export class GeoIPService {
     this.isProcessing = false;
   }
 }
+
+/** Country-only offline reader for native ledgers; never falls back to an API. */
+export async function openLocalCountryDatabase(filename: string) {
+  const reader = await maxmind.open<CountryResponse>(filename);
+  return (ip: string): string => reader.get(ip)?.country?.iso_code || '';
+}

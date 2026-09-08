@@ -3,7 +3,7 @@ import { RE2 } from 're2-wasm';
 import { nativeFilterFields, nativeFilterOperators, type NativeFilterExpression } from '@neko-master/shared';
 
 export const filterColumns: Record<typeof nativeFilterFields[number], string> = {
-  source: 'source', domain: 'domain', rootDomain: 'root_domain', destination: 'destination', inbound: 'inbound', outbound: 'outbound', rule: 'rule',
+  source: 'source', domain: 'domain', rootDomain: 'root_domain', destination: 'destination', inbound: 'inbound', outbound: 'outbound', rule: 'rule', country: 'sb_country(destination)',
 };
 const cache = new Map<string, RE2>();
 const registered = new WeakSet<Database.Database>();
