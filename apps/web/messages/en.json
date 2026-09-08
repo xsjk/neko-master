@@ -667,7 +667,7 @@
     "filterValue": "Rule {index} values",
     "removeFilterRule": "Remove rule {index}",
     "removeFilter": "Remove",
-    "filterValuesHelp": "One exact value per line; or select from the list below.",
+    "filterValuesHelp": "One exact value per line, or select below. Leave empty for Unknown.",
     "filterChoose": "Choose existing values",
     "filterIgnoreCase": "Ignore case",
     "filterRegexHelp": "RE2 pattern without / delimiters; supports ^, $, |, etc. No lookaround or backreferences.",

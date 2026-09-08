@@ -93,13 +93,18 @@ try {
  assert.deepEqual((await expression()).rules[0].values,['direct-out']);
  await page.getByRole('button',{name:'编辑筛选',exact:true}).click();
  await page.getByText('选择已有值',{exact:true}).click();
- await page.getByRole('checkbox',{name:'未识别',exact:true}).check();
- await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out, 未识别',{exact:true}).waitFor();
- assert.deepEqual((await expression()).rules[0].values,['direct-out','']);
+ assert.equal(await page.getByRole('checkbox',{name:'未识别',exact:true}).count(),0);
+ await page.getByRole('checkbox',{name:'direct-out',exact:true}).uncheck();
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ 未识别',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['']);
  await page.getByRole('button',{name:'编辑筛选',exact:true}).click();await page.getByText('选择已有值',{exact:true}).click();
- assert.equal(await page.getByRole('checkbox',{name:'未识别',exact:true}).isChecked(),true);
- await page.getByRole('checkbox',{name:'未识别',exact:true}).uncheck();
+ await page.getByRole('checkbox',{name:'direct-out',exact:true}).check();
  await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: ≠ direct-out',{exact:true}).waitFor();
  assert.deepEqual((await expression()).rules[0].values,['direct-out']);
+ await page.getByRole('button',{name:'编辑筛选',exact:true}).click();
+ await page.getByLabel('条件 1 匹配方式',{exact:true}).selectOption('in');
+ await page.getByLabel('条件 1 值',{exact:true}).fill('\n  \n');
+ await page.getByRole('button',{name:'应用筛选',exact:true}).click();await chips.getByTitle('出口节点: 未识别',{exact:true}).waitFor();
+ assert.deepEqual((await expression()).rules[0].values,['']);
  assert.deepEqual(errors,[]);console.log('Passed multi-select, exclusions, regex, invalid draft preservation, AND/OR, clear, drill-down, exports, compact removable chips, cancelled edits and mobile layout.');
 }finally{await browser.close();}
