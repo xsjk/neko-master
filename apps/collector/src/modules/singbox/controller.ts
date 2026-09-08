@@ -1,4 +1,4 @@
-import { loadNativeCountry, nativeCountryStatus } from './country.js';
+import { loadNativeCountry, nativeCountryStatus, stopNativeCountry } from './country.js';
 import { parseFilter, filterColumns } from './filters.js';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
@@ -13,7 +13,7 @@ export const singboxController: FastifyPluginAsync = async app => {
   const service = new NativeService(app.db, address, process.env.SINGBOX_SECRET || '');
   await loadNativeCountry(process.env.SINGBOX_COUNTRY_MMDB);
   service.start();
-  app.addHook('onClose', async () => service.stop());
+  app.addHook('onClose', async () => { service.stop(); stopNativeCountry(); });
   const sql = app.db.getNativeDatabase();
   app.addHook('onRequest', async (req, reply) => {
     const origin = req.headers.origin;

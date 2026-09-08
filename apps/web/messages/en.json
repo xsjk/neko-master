@@ -576,7 +576,7 @@
     "chainCoverage": "Traffic without recorded paths: {bytes}. Paths before this upgrade cannot be reconstructed.",
     "chainTruncated": "Showing the 1000 busiest paths.",
     "geoUnavailable": "The local geolocation database is not ready; countries are unavailable.",
-    "geoHelp": "Traffic by destination IP country; historical records use the current local database.",
+    "geoHelp": "Traffic by destination country. Hostnames are estimated using current DNS; pending, failed or multi-country results remain Unknown.",
 
     "title": "Traffic ledger",
     "subtitle": "Neko Master · sing-box native collection",
