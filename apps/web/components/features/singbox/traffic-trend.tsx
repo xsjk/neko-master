@@ -18,6 +18,22 @@ function timeTicks(domain: [number, number], width: number, minimum: number) {
   for (let value = start; value <= domain[1]; value += interval) ticks.push(value);
   return { ticks, interval };
 }
+// Round in the displayed byte unit, so ticks read 0, 2, 4, 6 KiB rather than
+// decimal byte steps converted into arbitrary fractions of KiB.
+function trafficTicks(maximum: number) {
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  let unit = 1, index = 0;
+  while (maximum >= unit * 1024 && index < units.length - 1) { unit *= 1024; index++; }
+  const target = Math.max(maximum / unit, 1) / 4;
+  const power = 10 ** Math.floor(Math.log10(target));
+  const spacing = Math.max(1 / unit, [1, 2, 5, 10].find(value => value * power >= target)! * power) * unit;
+  const count = Math.max(1, Math.ceil(maximum / spacing));
+  return {
+    ticks: Array.from({ length: count + 1 }, (_, i) => i * spacing),
+    top: count * spacing,
+    format: (value: number) => `${Number((value / unit).toPrecision(12))} ${units[index]}`,
+  };
+}
 function Selection({ domain, unit, onStart, onEnd, onSelect }: {
   domain: [number, number]; unit: number; onStart: () => void; onEnd: () => void;
   onSelect: (from: number, to: number) => void;
@@ -88,11 +104,12 @@ export function TrafficTrend({ stats, all, loading, canBack, onBack, onReset, on
     if (i && bucket - Number(rows[i - 1].bucket) > step) chart.push({ bucket: Number(rows[i - 1].bucket) + step, upload: null, download: null });
     chart.push({ bucket, upload: Number(row.upload), download: Number(row.download) });
   });
+  const vertical = trafficTicks(chart.reduce((max, row) => Math.max(max, row.upload || 0, row.download || 0), 0));
   return <Card className="min-w-0"><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>{t("trend")}</CardTitle><div className="flex gap-2"><Button size="sm" variant="outline" disabled={!canBack} onClick={onBack}>{t("timeBack")}</Button><Button size="sm" variant="outline" onClick={onReset}>{t("timeReset")}</Button></div></div><p className="text-xs text-muted-foreground">{t("dragTimeHint")}</p>{data && <p data-testid="time-scale" data-tick-ms={interval} data-bucket-ms={step} className="text-xs text-muted-foreground">{t("timeScale", { tick: duration(interval), bucket: duration(step) })}</p>}</CardHeader><CardContent><div className="h-72 select-none" style={{ touchAction: "pan-y" }}>
     {loading && !frozen ? <p>{t("loading")}</p> : chart.length ? <ResponsiveContainer width="100%" height="100%" onResize={width => setPlotWidth(Math.max(1, width - 101))}><AreaChart data={chart} margin={{ top: 5, right: 24, bottom: 5, left: 5 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
       <XAxis type="number" scale="time" dataKey="bucket" domain={domain} ticks={ticks} interval={0} allowDataOverflow tickFormatter={value => new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false, ...(interval >= 86400000 ? { month: "numeric", day: "numeric" } : sameDay ? { hour: "2-digit", minute: "2-digit" } : { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) })} tick={{ fill: "currentColor", fontSize: 10 }} />
-      <YAxis tickFormatter={value => bytes(Math.round(value))} tick={{ fill: "currentColor", fontSize: 10 }} width={72} />
+      <YAxis domain={[0, vertical.top]} ticks={vertical.ticks} interval={0} allowDataOverflow tickFormatter={vertical.format} tick={{ fill: "currentColor", fontSize: 10 }} width={72} />
       <Tooltip labelFormatter={value => displayTime(Number(value))} formatter={(value, name) => [bytes(Math.round(Number(value))), name === "download" ? t("download") : t("upload")]} contentStyle={{ background: "var(--card)", borderColor: "var(--border)", borderRadius: 12 }} />
       <Area isAnimationActive={false} connectNulls={false} type="monotone" dataKey="download" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.18} />
       <Area isAnimationActive={false} connectNulls={false} type="monotone" dataKey="upload" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.1} />

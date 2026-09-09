@@ -22,6 +22,8 @@ try {
  });
  await page.goto((process.env.BASE_URL || 'http://127.0.0.1:3100') + '/zh');
  const selection=page.getByTestId('time-selection');await selection.waitFor();
+ await page.getByText('6 KiB',{exact:true}).waitFor();
+ assert.deepEqual(await page.locator('svg text').filter({hasText:/^(0|2|4|6) KiB$/}).allTextContents(),['0 KiB','2 KiB','4 KiB','6 KiB']);
  const latest=()=>queries.at(-1);
  const active=async()=>new URL(await page.getByRole('link',{name:'CSV',exact:true}).getAttribute('href'),'http://localhost').searchParams;
  const bounds=async()=>{await selection.waitFor();await selection.scrollIntoViewIfNeeded();return selection.boundingBox();};
