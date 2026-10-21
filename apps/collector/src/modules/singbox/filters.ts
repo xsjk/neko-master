@@ -3,7 +3,7 @@ import { RE2 } from 're2-wasm';
 import { nativeFilterFields, nativeFilterOperators, type NativeFilterExpression } from '@neko-master/shared';
 
 export const filterColumns: Record<typeof nativeFilterFields[number], string> = {
-  source: 'source', domain: 'domain', rootDomain: 'root_domain', destination: 'destination', inbound: 'inbound', outbound: 'outbound', rule: 'rule', country: 'sb_country(destination)',
+  source: 'source', domain: "CASE WHEN domain<>'' THEN domain ELSE sb_domain(destination) END", rootDomain: "CASE WHEN root_domain<>'' THEN root_domain ELSE sb_root_domain(COALESCE(NULLIF(domain,''),destination)) END", destination: 'destination', inbound: 'inbound', outbound: 'outbound', rule: 'rule', country: 'sb_country(destination)',
 };
 const cache = new Map<string, RE2>();
 const registered = new WeakSet<Database.Database>();

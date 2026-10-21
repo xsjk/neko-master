@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { NativeBatch, NativeConnection, NativeEvent } from '@neko-master/shared';
 import { createTestBackend, createTestDatabase } from '../../__tests__/helpers.js';
+import Database from 'better-sqlite3';
 import { StatsDatabase } from '../db/db.js';
 import { cleanupNative, queryNativeChains, queryNativeStats, queryNativeConnections, addressIP } from './ledger.js';
 
@@ -187,6 +188,40 @@ describe('native lossless ledger', () => {
     expect(queryNativeStats(db,backend,{filter,dimension:'country'}).rows[0]).toMatchObject({label:'LOCAL',download:'100'});
     expect(queryNativeConnections(db,backend,{filter})).toHaveLength(1);
     expect([...queryNativeConnections(db,backend,{filter},true)]).toHaveLength(1);
+  });
+
+  it('uses hostname destinations when domain metadata is empty without guessing names for IPs', () => {
+    write([], {reset:true});
+    write([
+      event(connection('host','10','100',{domain:'',destination:'CDN.Example.COM.:443'})),
+      event(connection('ipv4','20','200',{domain:'',destination:'10.15.45.108:53001'})),
+      event(connection('ipv6','30','300',{domain:'',destination:'2001:db8::1'})),
+    ]);
+    expect(queryNativeStats(fixture.db.getNativeDatabase(),backend,{}).rows).toEqual([
+      {label:'',upload:'50',download:'500',connections:'2'},
+      {label:'cdn.example.com',upload:'10',download:'100',connections:'1'},
+    ]);
+    expect(fixture.db.getNativeDatabase().prepare("SELECT domain,root_domain FROM sb_connections WHERE id='host'").get()).toEqual({domain:'cdn.example.com',root_domain:'example.com'});
+    expect(addressIP('2001:db8::1')).toBe('2001:db8::1');
+  });
+  it('classifies historical hostname facts consistently in rankings, filters, details and separate export readers', () => {
+    write([], {reset:true});
+    write([event(connection('old','10','100',{domain:'',destination:'cdn.example.com:443'})),event(connection('known','20','200'))]);
+    const db=fixture.db.getNativeDatabase();
+    // Reproduce historical rows written before destination names were used.
+    db.exec("UPDATE sb_connections SET domain='',root_domain='' WHERE id='old'; UPDATE sb_facts SET domain='',root_domain='' WHERE connections=1 AND download=100");
+    const filter=JSON.stringify({match:'all',rules:[{field:'domain',op:'in',values:['cdn.example.com']},{field:'rootDomain',op:'in',values:['example.com']}]});
+    const before=db.prepare("SELECT SUM(upload) up,SUM(download) down,SUM(connections) count FROM sb_facts WHERE resolution='day'").get();
+    expect(queryNativeStats(db,backend,{filter}).total).toEqual({upload:'30',download:'300',connections:'2'});
+    expect(queryNativeStats(db,backend,{dimension:'rootDomain',filter}).rows).toEqual([{label:'example.com',upload:'30',download:'300',connections:'2'}]);
+    expect(queryNativeConnections(db,backend,{domain:'cdn.example.com'})).toHaveLength(2);
+    const reader=new Database(db.name,{readonly:true});
+    try {
+      const rows=[...queryNativeConnections(reader,backend,{filter},true)];
+      expect(rows).toHaveLength(2);expect(rows.every(row=>row.domain==='cdn.example.com'&&row.root_domain==='example.com')).toBe(true);
+    } finally {reader.close();}
+    expect(db.prepare("SELECT SUM(upload) up,SUM(download) down,SUM(connections) count FROM sb_facts WHERE resolution='day'").get()).toEqual(before);
+    expect(db.prepare("SELECT domain FROM sb_connections WHERE id='old'").get()).toEqual({domain:''});
   });
 
 });

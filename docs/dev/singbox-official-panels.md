@@ -8,6 +8,10 @@ The native dashboard uses Overview, Domains, Rules, Regions, Connections and Nod
 
 Native rules keep their recorded names. Pie/list, domain bars, countries, and rule/terminal nodes add filters. Group nodes only describe observed topology, since an intermediate group is not the ledger's terminal outbound. All added filters obey the single AND/OR mode, including selections from different tabs. Rendering converts decimal byte strings to numbers; API/SQLite counters remain lossless.
 
+## Domain metadata
+
+When sing-box omits the domain field but the destination is a hostname, the native ledger uses that recorded hostname (without its port). Historical records use the same normalization at query time, including domain/root-domain filters, rankings, connection details and exports. Existing domain metadata takes precedence. Literal IPv4/IPv6 destinations remain unnamed; reverse DNS and unrelated connections are not used to invent a domain. This changes classification only, without duplicating or rewriting historical traffic counters.
+
 ## Facts and compatibility
 
 Schema v3 adds `chain` to the `sb_facts` primary key. The same native batch transaction writes minute and daily path facts. Migration copies existing columns atomically, leaving old chain values empty, preserving every byte and connection count. Existing retention (90-day minutes, permanent daily facts) and backend deletion already cover the same table. This is the native SQLite path, not the upstream Clash/ClickHouse pipeline.

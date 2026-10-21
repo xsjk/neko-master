@@ -1,3 +1,5 @@
+import { addressIP, destinationDomain, registerNativeDomains } from './domains.js';
+export { addressIP } from './domains.js';
 import { registerNativeCountry } from './country.js';
 import { compileFilter, filterColumns } from './filters.js';
 import type Database from 'better-sqlite3';
@@ -7,7 +9,6 @@ import type { NativeBatch, NativeConnection, NativeFilters, NativeStats } from '
 export interface NativeWriteBatch { batch: NativeBatch; run: string; now: number; initial: boolean }
 type Row = Record<string, string | bigint>;
 const integer = (v: string | undefined) => BigInt(v || '0');
-export const addressIP = (s: string) => s.startsWith('[') ? s.slice(1, s.indexOf(']')) : s.replace(/:\d+$/, '');
 const DIMENSIONS: Record<string, string> = { ...filterColumns, chain: 'chain' };
 const DAY = 86400000;
 
@@ -45,7 +46,7 @@ export function applyNativeBatch(db: Database.Database, backend: number, input: 
     const closed = Number(event.closedAt) > 0 ? Number(event.closedAt) : Number(c?.closedAt || 0);
     if (!old) {
       const conn = c as NativeConnection;
-      const domain = (conn.domain || '').toLowerCase().replace(/\.$/, '');
+      const domain = (conn.domain || destinationDomain(conn.destination || '')).toLowerCase().replace(/\.$/, '');
       old = {
         source: addressIP(conn.source || ''), destination: addressIP(conn.destination || ''), domain,
         root_domain: getDomain(domain, { allowPrivateDomains: true }) || domain,
@@ -86,6 +87,7 @@ export function cleanupNative(db: Database.Database, now = Date.now()) {
 
 function where(db: Database.Database, filters: NativeFilters, detail = false) {
   registerNativeCountry(db);
+  registerNativeDomains(db);
   const clauses: string[] = []; const params: (string | number)[] = [];
   for (const [key, col] of Object.entries(filterColumns)) {
     const v = filters[key as keyof NativeFilters];
@@ -143,7 +145,7 @@ export function queryNativeConnections(db: Database.Database, backend: number, f
   const f = where(db, filters, true);
   const page = Number(filters.page || 0);
   if (!Number.isSafeInteger(page) || page < 0 || page > 1000000) throw new Error('Invalid page');
-  const stmt = db.prepare(`SELECT *,upload-baseline_upload recorded_upload,download-baseline_download recorded_download FROM sb_connections WHERE backend_id=?${f.sql} ORDER BY created DESC${exportAll ? '' : ' LIMIT 100 OFFSET ?'}`).safeIntegers();
+  const stmt = db.prepare(`SELECT *,${DIMENSIONS.domain} domain,${DIMENSIONS.rootDomain} root_domain,upload-baseline_upload recorded_upload,download-baseline_download recorded_download FROM sb_connections WHERE backend_id=?${f.sql} ORDER BY created DESC${exportAll ? '' : ' LIMIT 100 OFFSET ?'}`).safeIntegers();
   const args = exportAll ? [backend, ...f.params] : [backend, ...f.params, page * 100];
   return exportAll ? stmt.iterate(...args) : jsonRows(stmt.all(...args));
 }
